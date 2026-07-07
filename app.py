@@ -1,3 +1,4 @@
+import hashlib
 import io
 import re
 from datetime import date, datetime
@@ -175,6 +176,14 @@ COLUMN_FLAG_TO_ERROR = {
     "Date of Birth": {"red": "dob", "yellow": "dob"},
     "Country": {"yellow": "country"},
     "Emergency Relation": {"yellow": "relation"},
+}
+
+EMPTY_FIELD_ERROR = {
+    "Phone": "phone",
+    "Emergency Phone": "phone",
+    "Gender": "gender",
+    "Date of Birth": "dob",
+    "Emergency Relation": "relation",
 }
 
 NAME_OUTPUT_COLUMNS = ["Full Name", "First Name", "Last Name"]
@@ -358,10 +367,8 @@ def format_dob_output(dt: pd.Timestamp) -> str:
 def parse_numeric_date(raw: str) -> Optional[pd.Timestamp]:
     """
     Parse numeric date parts into a timestamp.
-    - Ambiguous (both parts <= 12): default DD-MM-YYYY.
-    - First part > 12: DD-MM-YYYY.
-    - Second part > 12: MM-DD-YYYY.
-    - YYYY-MM-DD (ISO) also supported.
+    - Always treat numeric day/month input as DD-MM-YYYY.
+    - YYYY-MM-DD (ISO) is also supported when first part is clearly a year.
     """
     raw = raw.strip().replace(".", "-").replace("/", "-")
     match = re.match(r"^(\d{1,4})-(\d{1,2})-(\d{1,2}|\d{4})$", raw)
@@ -372,12 +379,7 @@ def parse_numeric_date(raw: str) -> Optional[pd.Timestamp]:
 
     if p1 > 31:
         year, month, day = p1, p2, p3
-    elif p1 > 12:
-        day, month, year = p1, p2, p3
-    elif p2 > 12:
-        month, day, year = p1, p2, p3
     else:
-        # Ambiguous e.g. 5/12/2005 -> default DD-MM-YYYY (5 Dec 2005)
         day, month, year = p1, p2, p3
 
     if year < 100:
@@ -583,8 +585,10 @@ def guess_mapping(columns) -> Dict[str, Optional[str]]:
     return guessed
 
 
-def read_uploaded_file(uploaded_file) -> pd.DataFrame:
-    filename = uploaded_file.name.lower()
+@st.cache_data(show_spinner=False)
+def read_uploaded_file_cached(file_bytes: bytes, filename: str) -> pd.DataFrame:
+    filename = filename.lower()
+    uploaded_file = io.BytesIO(file_bytes)
     if filename.endswith(".csv"):
         return pd.read_csv(uploaded_file, dtype=str, keep_default_na=False).fillna("")
     if filename.endswith(".xlsx"):
@@ -602,6 +606,11 @@ def read_uploaded_file(uploaded_file) -> pd.DataFrame:
                 df = df.iloc[1:].reset_index(drop=True)
             return df.astype(str).fillna("")
     raise ValueError("Unsupported file format")
+
+
+def read_uploaded_file(uploaded_file) -> pd.DataFrame:
+    file_bytes = uploaded_file.getvalue()
+    return read_uploaded_file_cached(file_bytes, uploaded_file.name)
 
 
 def mark_name_issue(cell_flags: Dict[Tuple[int, str], str], row_idx: int, columns: List[str]):
@@ -661,6 +670,11 @@ def apply_cleaning(
         if error_type:
             cell_flags[(row_idx, column)] = error_type
 
+    def mark_empty(row_idx: int, column: str):
+        error_type = EMPTY_FIELD_ERROR.get(column)
+        if error_type:
+            cell_flags[(row_idx, column)] = error_type
+
     # Name handling: if full name exists use it to derive first/last/full by your rules.
     full_name_col = mapping.get("full_name")
     first_name_col = mapping.get("first_name")
@@ -713,6 +727,8 @@ def apply_cleaning(
                 raw = out.at[i, src_col]
                 cleaned, flag = cleaner(raw)
                 cleaned_values.append(cleaned)
+                if is_blank(raw):
+                    mark_empty(i, target)
                 mark_cell(i, target, flag)
             out[target] = cleaned_values
 
@@ -727,6 +743,8 @@ def apply_cleaning(
             cleaned, flag = clean_dob(raw)
             dob_values.append(cleaned)
             age_values.append(calculate_age_from_dob(cleaned, age_as_on))
+            if is_blank(raw):
+                mark_empty(i, "Date of Birth")
             mark_cell(i, "Date of Birth", flag)
         out["Date of Birth"] = dob_values
         out["Age"] = age_values
@@ -933,16 +951,58 @@ def df_to_excel_with_highlight(df: pd.DataFrame, cell_flags: Dict[Tuple[int, str
 st.title("FileSort Cleaner")
 st.caption("Upload -> scan -> manual map -> category map -> clean -> download")
 
-uploaded = st.file_uploader("Upload CSV/XLSX/XLS", type=["csv", "xlsx", "xls"])
+uploaded = st.file_uploader("Upload CSV/XLSX/XLS", type=["csv", "xlsx", "xls"], key="source_upload")
 
-if uploaded:
+
+def clear_loaded_file_state():
+    for key in [
+        "active_file_bytes",
+        "active_file_name",
+        "active_file_id",
+        "category_map_df",
+        "category_map_source",
+        "category_groups",
+        "tshirt_map_df",
+        "tshirt_map_source",
+        "tshirt_groups",
+    ]:
+        st.session_state.pop(key, None)
+    for field in CANONICAL_FIELDS:
+        st.session_state.pop(f"map_{field}", None)
+
+
+if uploaded is not None:
+    current_bytes = uploaded.getvalue()
+    current_file_id = hashlib.md5(current_bytes).hexdigest()
+    if st.session_state.get("active_file_id") != current_file_id:
+        clear_loaded_file_state()
+        st.session_state["active_file_bytes"] = current_bytes
+        st.session_state["active_file_name"] = uploaded.name
+        st.session_state["active_file_id"] = current_file_id
+
+src_df: Optional[pd.DataFrame] = None
+if st.session_state.get("active_file_bytes"):
     try:
-        src_df = read_uploaded_file(uploaded)
+        src_df = read_uploaded_file_cached(
+            st.session_state["active_file_bytes"],
+            st.session_state["active_file_name"],
+        )
     except Exception as exc:
         st.error(f"Could not read file: {exc}")
         st.stop()
 
-    st.success(f"Loaded file with {len(src_df)} rows and {len(src_df.columns)} columns.")
+if src_df is not None:
+    top_left, top_right = st.columns([3, 1])
+    with top_left:
+        st.success(
+            f"Loaded file `{st.session_state.get('active_file_name', '')}` with "
+            f"{len(src_df)} rows and {len(src_df.columns)} columns."
+        )
+    with top_right:
+        if st.button("Remove Loaded File", type="secondary", use_container_width=True):
+            clear_loaded_file_state()
+            st.rerun()
+
     st.dataframe(src_df.head(8), use_container_width=True)
 
     guessed = guess_mapping(src_df.columns)
@@ -973,34 +1033,28 @@ if uploaded:
                 "DOB merge enabled: will use first non-empty value from -> "
                 + ", ".join([dob_col] + extra_dob_cols)
             )
-    age_as_on = st.date_input("Age calculation date (as on)", value=date.today())
+    age_as_on = st.date_input(
+        "Age calculation date (as on)",
+        value=date.today(),
+        format="DD-MM-YYYY",
+    )
 
     category_map: Dict[str, str] = {}
     tshirt_map: Dict[str, str] = {}
     cat_col = mapping.get("category")
     if cat_col:
         st.subheader("Step 2: Category Manual Mapping")
-        raw_categories = (
+        cat_series = (
             src_df[cat_col]
             .fillna("")
             .astype(str)
             .map(strip_formula)
             .map(clean_spaces)
             .replace("", ".")
-            .drop_duplicates()
-            .tolist()
         )
+        raw_categories = cat_series.drop_duplicates().tolist()
         raw_categories = sorted(raw_categories)
-        cat_counts = (
-            src_df[cat_col]
-            .fillna("")
-            .astype(str)
-            .map(strip_formula)
-            .map(clean_spaces)
-            .replace("", ".")
-            .value_counts()
-            .to_dict()
-        )
+        cat_counts = cat_series.value_counts().to_dict()
         if "category_map_df" not in st.session_state or st.session_state.get("category_map_source") != tuple(raw_categories):
             st.session_state["category_map_df"] = pd.DataFrame(
                 {"Raw Category": raw_categories, "Mapped Category": raw_categories}
@@ -1097,27 +1151,17 @@ if uploaded:
     tshirt_col = mapping.get("tshirt_size")
     if tshirt_col:
         st.subheader("Step 3: T-Shirt Size Manual Mapping")
-        raw_tshirts = (
+        tshirt_series = (
             src_df[tshirt_col]
             .fillna("")
             .astype(str)
             .map(strip_formula)
             .map(clean_spaces)
             .replace("", ".")
-            .drop_duplicates()
-            .tolist()
         )
+        raw_tshirts = tshirt_series.drop_duplicates().tolist()
         raw_tshirts = sorted(raw_tshirts)
-        tshirt_counts = (
-            src_df[tshirt_col]
-            .fillna("")
-            .astype(str)
-            .map(strip_formula)
-            .map(clean_spaces)
-            .replace("", ".")
-            .value_counts()
-            .to_dict()
-        )
+        tshirt_counts = tshirt_series.value_counts().to_dict()
         if "tshirt_map_df" not in st.session_state or st.session_state.get("tshirt_map_source") != tuple(raw_tshirts):
             st.session_state["tshirt_map_df"] = pd.DataFrame(
                 {"Raw T-Shirt Size": raw_tshirts, "Mapped T-Shirt Size": raw_tshirts}
@@ -1236,4 +1280,6 @@ if uploaded:
             file_name="cleaned_output.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+else:
+    st.info("Upload a file to start. Loaded progress stays until you click 'Remove Loaded File'.")
 
