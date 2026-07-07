@@ -1,6 +1,7 @@
 import hashlib
 import io
 import re
+import uuid
 from datetime import date, datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -367,7 +368,8 @@ def format_dob_output(dt: pd.Timestamp) -> str:
 def parse_numeric_date(raw: str) -> Optional[pd.Timestamp]:
     """
     Parse numeric date parts into a timestamp.
-    - Always treat numeric day/month input as DD-MM-YYYY.
+    - Default numeric day/month input to DD-MM-YYYY.
+    - If second part is clearly day (>12), treat input as MM-DD-YYYY and convert.
     - YYYY-MM-DD (ISO) is also supported when first part is clearly a year.
     """
     raw = raw.strip().replace(".", "-").replace("/", "-")
@@ -379,6 +381,9 @@ def parse_numeric_date(raw: str) -> Optional[pd.Timestamp]:
 
     if p1 > 31:
         year, month, day = p1, p2, p3
+    elif p2 > 12:
+        # Obvious MM-DD-YYYY input (e.g. 5/15/1991) -> convert to DD-MM-YYYY.
+        month, day, year = p1, p2, p3
     else:
         day, month, year = p1, p2, p3
 
@@ -951,10 +956,60 @@ def df_to_excel_with_highlight(df: pd.DataFrame, cell_flags: Dict[Tuple[int, str
 st.title("FileSort Cleaner")
 st.caption("Upload -> scan -> manual map -> category map -> clean -> download")
 
-uploaded = st.file_uploader("Upload CSV/XLSX/XLS", type=["csv", "xlsx", "xls"], key="source_upload")
+@st.cache_resource
+def get_persisted_state_store():
+    return {}
+
+
+def get_session_persist_id() -> str:
+    sid = st.query_params.get("sid")
+    if isinstance(sid, list):
+        sid = sid[0] if sid else ""
+    if not sid:
+        sid = uuid.uuid4().hex
+        st.query_params["sid"] = sid
+    return sid
+
+
+def restore_persisted_state():
+    store = get_persisted_state_store()
+    sid = get_session_persist_id()
+    persisted = store.get(sid, {})
+    for key, value in persisted.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def save_persisted_state():
+    store = get_persisted_state_store()
+    sid = get_session_persist_id()
+    keys_to_persist = [
+        "active_file_bytes",
+        "active_file_name",
+        "active_file_id",
+        "category_map_df",
+        "category_map_source",
+        "category_groups",
+        "tshirt_map_df",
+        "tshirt_map_source",
+        "tshirt_groups",
+        "age_as_on_date",
+        "upload_widget_nonce",
+    ] + [f"map_{field}" for field in CANONICAL_FIELDS]
+    store[sid] = {k: st.session_state[k] for k in keys_to_persist if k in st.session_state}
+
+
+restore_persisted_state()
+if "upload_widget_nonce" not in st.session_state:
+    st.session_state["upload_widget_nonce"] = 0
+
+upload_key = f"source_upload_{st.session_state['upload_widget_nonce']}"
+uploaded = st.file_uploader("Upload CSV/XLSX/XLS", type=["csv", "xlsx", "xls"], key=upload_key)
 
 
 def clear_loaded_file_state():
+    sid = get_session_persist_id()
+    get_persisted_state_store().pop(sid, None)
     for key in [
         "active_file_bytes",
         "active_file_name",
@@ -969,6 +1024,8 @@ def clear_loaded_file_state():
         st.session_state.pop(key, None)
     for field in CANONICAL_FIELDS:
         st.session_state.pop(f"map_{field}", None)
+    st.session_state.pop("age_as_on_date", None)
+    st.session_state["upload_widget_nonce"] = st.session_state.get("upload_widget_nonce", 0) + 1
 
 
 if uploaded is not None:
@@ -1037,6 +1094,7 @@ if src_df is not None:
         "Age calculation date (as on)",
         value=date.today(),
         format="DD-MM-YYYY",
+        key="age_as_on_date",
     )
 
     category_map: Dict[str, str] = {}
@@ -1280,6 +1338,7 @@ if src_df is not None:
             file_name="cleaned_output.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+    save_persisted_state()
 else:
     st.info("Upload a file to start. Loaded progress stays until you click 'Remove Loaded File'.")
 
