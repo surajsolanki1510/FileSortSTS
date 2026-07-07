@@ -9,6 +9,17 @@ from openpyxl.styles import PatternFill
 
 
 st.set_page_config(page_title="FileSort Cleaner", layout="wide")
+st.markdown(
+    """
+    <style>
+    [data-testid="stToolbar"] {display: none !important;}
+    [data-testid="stDecoration"] {display: none !important;}
+    header {display: none !important;}
+    #MainMenu {visibility: hidden;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 CANONICAL_FIELDS = [
