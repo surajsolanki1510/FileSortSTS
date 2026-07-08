@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
+from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
 
@@ -590,6 +591,86 @@ def guess_mapping(columns) -> Dict[str, Optional[str]]:
     return guessed
 
 
+def format_excel_date_display(value, number_format: str) -> str:
+    """
+    Rebuild the string a user actually sees in an Excel date cell.
+
+    Excel stores dates as a datetime, so an ambiguous entry like ``02-06-1976``
+    can be read back as ``1976-02-06`` and lose its displayed field order. We
+    reconstruct the visible order (dd-mm vs mm-dd) from the cell's number format
+    so the downstream DD-MM default in clean_dob interprets it as written.
+    """
+    day = f"{value.day:02d}"
+    month = f"{value.month:02d}"
+    year = f"{value.year:04d}"
+
+    fmt = (number_format or "").lower()
+    d_idx = fmt.find("d")
+    m_idx = fmt.find("m")
+
+    if d_idx == -1 and m_idx == -1:
+        return f"{day}-{month}-{year}"
+    if d_idx == -1:
+        d_idx = 10 ** 6
+    if m_idx == -1:
+        m_idx = 10 ** 6
+
+    if m_idx < d_idx:
+        return f"{month}-{day}-{year}"
+    return f"{day}-{month}-{year}"
+
+
+def cell_to_text(cell) -> str:
+    value = cell.value
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (datetime, date)):
+        return format_excel_date_display(value, cell.number_format)
+    return str(value)
+
+
+def dedupe_headers(headers: List[str]) -> List[str]:
+    seen: Dict[str, int] = {}
+    result: List[str] = []
+    for idx, name in enumerate(headers):
+        clean = name.strip() if isinstance(name, str) else ""
+        if not clean:
+            clean = f"Unnamed: {idx}"
+        if clean in seen:
+            seen[clean] += 1
+            clean = f"{clean}.{seen[clean]}"
+        else:
+            seen[clean] = 0
+        result.append(clean)
+    return result
+
+
+def read_xlsx_with_display_dates(file_bytes: bytes) -> pd.DataFrame:
+    workbook = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+    worksheet = workbook.active
+    headers: Optional[List[str]] = None
+    data: List[List[str]] = []
+    for row in worksheet.iter_rows():
+        cells = [cell_to_text(cell) for cell in row]
+        if headers is None:
+            headers = cells
+        else:
+            data.append(cells)
+    workbook.close()
+
+    if not headers:
+        return pd.DataFrame()
+
+    columns = dedupe_headers(headers)
+    normalized = [
+        (values + [""] * (len(columns) - len(values)))[: len(columns)]
+        for values in data
+    ]
+    return pd.DataFrame(normalized, columns=columns).fillna("")
+
+
 @st.cache_data(show_spinner=False)
 def read_uploaded_file_cached(file_bytes: bytes, filename: str) -> pd.DataFrame:
     filename = filename.lower()
@@ -597,7 +678,7 @@ def read_uploaded_file_cached(file_bytes: bytes, filename: str) -> pd.DataFrame:
     if filename.endswith(".csv"):
         return pd.read_csv(uploaded_file, dtype=str, keep_default_na=False).fillna("")
     if filename.endswith(".xlsx"):
-        return pd.read_excel(uploaded_file, dtype=str).fillna("")
+        return read_xlsx_with_display_dates(file_bytes)
     if filename.endswith(".xls"):
         # Try old Excel first, fallback to HTML-table style xls.
         try:

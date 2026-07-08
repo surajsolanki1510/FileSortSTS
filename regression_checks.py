@@ -16,7 +16,8 @@ def check(actual, expected, label):
 
 def run():
     check(clean_dob("11/06/1989"), ("11-06-1989", None), "DOB dd-mm parsing")
-    check(clean_dob("12-14-2005")[1], "red", "DOB invalid month/day detection")
+    check(clean_dob("5/15/1991"), ("15-05-1991", None), "DOB obvious mm-dd conversion")
+    check(clean_dob("13-13-2005")[1], "red", "DOB invalid month/day detection")
     check(
         calculate_age_from_dob("11-06-1989", date(2026, 7, 7)),
         "37",
