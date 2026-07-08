@@ -366,11 +366,12 @@ def format_dob_output(dt: pd.Timestamp) -> str:
     return dt.strftime("%d-%m-%Y")
 
 
-def parse_numeric_date(raw: str) -> Optional[pd.Timestamp]:
+def resolve_numeric_date_parts(raw: str) -> Optional[Tuple[int, int, int]]:
     """
-    Parse numeric date parts into a timestamp.
+    Decide (day, month, year) from a numeric date string, without checking that
+    the calendar date actually exists.
     - Default numeric day/month input to DD-MM-YYYY.
-    - If second part is clearly day (>12), treat input as MM-DD-YYYY and convert.
+    - If second part is clearly a day (>12), treat input as MM-DD-YYYY.
     - YYYY-MM-DD (ISO) is also supported when first part is clearly a year.
     """
     raw = raw.strip().replace(".", "-").replace("/", "-")
@@ -391,6 +392,15 @@ def parse_numeric_date(raw: str) -> Optional[pd.Timestamp]:
     if year < 100:
         year += 2000 if year < 30 else 1900
 
+    return day, month, year
+
+
+def parse_numeric_date(raw: str) -> Optional[pd.Timestamp]:
+    """Parse numeric date parts into a timestamp (NaT if the date is impossible)."""
+    parts = resolve_numeric_date_parts(raw)
+    if parts is None:
+        return None
+    day, month, year = parts
     try:
         return pd.Timestamp(year=year, month=month, day=day)
     except ValueError:
@@ -416,7 +426,12 @@ def clean_dob(raw: str) -> Tuple[str, Optional[str]]:
             dt = pd.to_datetime(ordinal_fixed, dayfirst=True, errors="coerce")
 
     if pd.isna(dt):
-        # impossible numeric date pattern -> red
+        # Impossible calendar date: still reorder to DD-MM-YYYY so an obvious
+        # MM-DD-YYYY input (e.g. 2-30-2025) is shown as 30-02-2025, flagged red.
+        parts = resolve_numeric_date_parts(ordinal_fixed)
+        if parts is not None:
+            day, month, year = parts
+            return f"{day:02d}-{month:02d}-{year:04d}", "red"
         if re.match(r"^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$", value):
             return value, "red"
         return value, "yellow"
