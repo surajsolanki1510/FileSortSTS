@@ -11,16 +11,435 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
 
-st.set_page_config(page_title="FileSort Cleaner", layout="wide")
+st.set_page_config(page_title="FileSort Cleaner", layout="wide", page_icon="🔥")
+
+THEME_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Orbitron:wght@600;900&family=Rajdhani:wght@500;600;700&display=swap');
+
+:root {
+    --fire-core: #fff3b0;
+    --fire-hot: #ffd60a;
+    --fire-mid: #ff8a00;
+    --fire-deep: #ff3d00;
+    --ember: #ff2e63;
+    --neon: #00e5ff;
+    --void: #05040c;
+    --panel: rgba(18, 14, 32, 0.72);
+    --edge: rgba(255, 138, 0, 0.35);
+}
+
+[data-testid="stToolbar"] {display: none !important;}
+[data-testid="stDecoration"] {display: none !important;}
+header {display: none !important;}
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+
+/* ---------- Base canvas ---------- */
+.stApp {
+    background:
+        radial-gradient(1200px 600px at 12% -10%, rgba(255, 61, 0, 0.20), transparent 60%),
+        radial-gradient(900px 500px at 88% 0%, rgba(0, 229, 255, 0.14), transparent 55%),
+        radial-gradient(800px 700px at 50% 110%, rgba(255, 46, 99, 0.18), transparent 60%),
+        linear-gradient(180deg, #05040c 0%, #0b0716 45%, #120a1e 100%);
+    background-attachment: fixed;
+    color: #f2ecff;
+    font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+}
+
+/* Animated aurora haze over the base */
+.stApp::before {
+    content: "";
+    position: fixed;
+    inset: -20%;
+    pointer-events: none;
+    z-index: 0;
+    background:
+        conic-gradient(from 0deg at 30% 40%, rgba(255,61,0,0.10), rgba(0,229,255,0.06), rgba(255,46,99,0.10), rgba(255,61,0,0.10));
+    filter: blur(90px);
+    animation: auroraSpin 24s linear infinite;
+    opacity: 0.85;
+}
+
+/* Scanline / grid texture for the anime tech feel */
+.stApp::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.030) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.030) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(circle at 50% 30%, black 10%, transparent 78%);
+    -webkit-mask-image: radial-gradient(circle at 50% 30%, black 10%, transparent 78%);
+    opacity: 0.5;
+}
+
+[data-testid="stAppViewContainer"] > .main { position: relative; z-index: 1; }
+.block-container { position: relative; z-index: 2; padding-top: 1.5rem !important; }
+
+@keyframes auroraSpin {
+    from { transform: rotate(0deg) scale(1.05); }
+    to   { transform: rotate(360deg) scale(1.05); }
+}
+
+/* ---------- Ember particle field ---------- */
+.ember-field {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+}
+.ember {
+    position: absolute;
+    bottom: -40px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--fire-core) 0%, var(--fire-mid) 45%, rgba(255, 61, 0, 0) 70%);
+    box-shadow: 0 0 12px 3px rgba(255, 138, 0, 0.65);
+    animation: emberRise linear infinite;
+    opacity: 0;
+}
+@keyframes emberRise {
+    0%   { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
+    12%  { opacity: 1; }
+    70%  { opacity: 0.85; }
+    100% { transform: translate3d(var(--drift, 40px), -105vh, 0) scale(1.25); opacity: 0; }
+}
+
+/* Base of the screen burning */
+.fire-floor {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: 190px;
+    pointer-events: none;
+    z-index: 1;
+    background: linear-gradient(0deg, rgba(255, 61, 0, 0.38) 0%, rgba(255, 138, 0, 0.16) 38%, transparent 100%);
+    filter: blur(22px);
+    animation: firePulse 3.4s ease-in-out infinite alternate;
+}
+@keyframes firePulse {
+    from { opacity: 0.55; transform: scaleY(0.92); }
+    to   { opacity: 1;    transform: scaleY(1.10); }
+}
+
+/* ---------- Hero ---------- */
+.hero {
+    position: relative;
+    padding: 34px 38px 30px;
+    margin-bottom: 26px;
+    border-radius: 22px;
+    background: linear-gradient(135deg, rgba(26, 16, 46, 0.86), rgba(10, 8, 22, 0.92));
+    border: 1px solid var(--edge);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+        0 24px 70px rgba(255, 61, 0, 0.18),
+        0 0 90px rgba(0, 229, 255, 0.07);
+    overflow: hidden;
+}
+.hero::before {
+    content: "";
+    position: absolute;
+    top: -60%; left: -30%;
+    width: 60%; height: 220%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+    transform: rotate(18deg);
+    animation: slashSweep 5.5s ease-in-out infinite;
+}
+@keyframes slashSweep {
+    0%, 62%  { left: -40%; }
+    100%     { left: 130%; }
+}
+.hero-kicker {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.74rem;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--neon);
+    text-shadow: 0 0 14px rgba(0, 229, 255, 0.75);
+    margin-bottom: 6px;
+}
+.hero-title {
+    font-family: 'Bebas Neue', 'Orbitron', sans-serif;
+    font-size: clamp(2.9rem, 7.5vw, 5.4rem);
+    line-height: 0.94;
+    letter-spacing: 0.045em;
+    margin: 0;
+    background: linear-gradient(180deg, #fff8d6 0%, var(--fire-hot) 32%, var(--fire-mid) 58%, var(--fire-deep) 86%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 18px rgba(255, 106, 0, 0.55)) drop-shadow(0 0 44px rgba(255, 46, 99, 0.35));
+    animation: heatFlicker 3.6s ease-in-out infinite;
+}
+@keyframes heatFlicker {
+    0%, 100% { filter: drop-shadow(0 0 18px rgba(255, 106, 0, 0.55)) drop-shadow(0 0 44px rgba(255, 46, 99, 0.32)); }
+    45%      { filter: drop-shadow(0 0 26px rgba(255, 160, 0, 0.85)) drop-shadow(0 0 66px rgba(255, 61, 0, 0.50)); }
+    72%      { filter: drop-shadow(0 0 16px rgba(255, 106, 0, 0.50)) drop-shadow(0 0 38px rgba(255, 46, 99, 0.30)); }
+}
+.hero-sub {
+    margin-top: 12px;
+    font-size: 1.02rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    color: #cdbfe8;
+}
+.hero-sub .step { color: var(--fire-hot); text-shadow: 0 0 10px rgba(255, 214, 10, 0.5); }
+.hero-sub .arrow { color: var(--ember); margin: 0 6px; }
+.hero-rule {
+    margin-top: 18px;
+    height: 3px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--fire-deep), var(--fire-hot), var(--neon), transparent);
+    box-shadow: 0 0 18px rgba(255, 138, 0, 0.7);
+    animation: rulePulse 2.8s ease-in-out infinite alternate;
+}
+@keyframes rulePulse {
+    from { opacity: 0.65; }
+    to   { opacity: 1; }
+}
+
+/* ---------- Typography ---------- */
+h1, h2, h3, h4 {
+    font-family: 'Orbitron', 'Bebas Neue', sans-serif !important;
+    color: #fff1e0 !important;
+    letter-spacing: 0.03em;
+}
+[data-testid="stMarkdownContainer"] h3,
+[data-testid="stHeadingWithActionElements"] h3 {
+    position: relative;
+    padding-left: 16px;
+    text-shadow: 0 0 22px rgba(255, 138, 0, 0.45);
+}
+[data-testid="stMarkdownContainer"] h3::before,
+[data-testid="stHeadingWithActionElements"] h3::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 12%;
+    height: 76%;
+    width: 5px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, var(--fire-hot), var(--fire-deep));
+    box-shadow: 0 0 14px rgba(255, 138, 0, 0.9);
+}
+p, label, span, li { color: #ded4f2; }
+
+/* ---------- Buttons ---------- */
+.stButton > button, .stDownloadButton > button {
+    font-family: 'Orbitron', sans-serif !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    font-size: 0.80rem !important;
+    color: #fff4e2 !important;
+    background: linear-gradient(135deg, rgba(60, 22, 60, 0.92), rgba(24, 14, 38, 0.92)) !important;
+    border: 1px solid rgba(255, 138, 0, 0.55) !important;
+    border-radius: 12px !important;
+    padding: 0.60rem 1.1rem !important;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.16s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+.stButton > button:hover, .stDownloadButton > button:hover {
+    transform: translateY(-2px) scale(1.015);
+    border-color: var(--fire-hot) !important;
+    color: #fffdf5 !important;
+    box-shadow: 0 10px 30px rgba(255, 61, 0, 0.40), 0 0 26px rgba(255, 214, 10, 0.35);
+}
+.stButton > button::after, .stDownloadButton > button::after {
+    content: "";
+    position: absolute;
+    top: 0; left: -120%;
+    width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 226, 150, 0.42), transparent);
+    transform: skewX(-22deg);
+    transition: left 0.55s ease;
+}
+.stButton > button:hover::after, .stDownloadButton > button:hover::after { left: 130%; }
+
+/* Primary = full inferno */
+.stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
+    background: linear-gradient(135deg, var(--fire-deep), var(--fire-mid) 55%, var(--fire-hot)) !important;
+    border: 1px solid #ffe08a !important;
+    color: #2a0d00 !important;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+    animation: infernoPulse 2.2s ease-in-out infinite;
+}
+@keyframes infernoPulse {
+    0%, 100% { box-shadow: 0 0 22px rgba(255, 94, 0, 0.55), 0 8px 26px rgba(0,0,0,0.45); }
+    50%      { box-shadow: 0 0 44px rgba(255, 160, 0, 0.90), 0 0 76px rgba(255, 61, 0, 0.45), 0 8px 26px rgba(0,0,0,0.45); }
+}
+.stButton > button[kind="primary"]:hover {
+    color: #1c0800 !important;
+    transform: translateY(-2px) scale(1.03);
+}
+
+/* ---------- Panels: uploader, alerts, expanders, tables ---------- */
+[data-testid="stFileUploader"] {
+    background: var(--panel);
+    border: 1.5px dashed rgba(255, 138, 0, 0.55);
+    border-radius: 18px;
+    padding: 12px 16px;
+    backdrop-filter: blur(9px);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    box-shadow: 0 0 34px rgba(255, 61, 0, 0.10) inset;
+}
+[data-testid="stFileUploader"]:hover {
+    border-color: var(--fire-hot);
+    box-shadow: 0 0 42px rgba(255, 138, 0, 0.28), 0 0 34px rgba(255, 61, 0, 0.12) inset;
+}
+[data-testid="stFileUploaderDropzone"] { background: transparent !important; }
+[data-testid="stFileUploaderDropzoneInstructions"],
+[data-testid="stFileUploaderDropzoneInstructions"] span,
+[data-testid="stFileUploaderDropzoneInstructions"] small,
+[data-testid="stFileUploaderDropzoneInstructions"] div {
+    color: #d9cbf5 !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] svg { fill: var(--fire-mid) !important; }
+[data-testid="stFileUploader"] button {
+    background: linear-gradient(135deg, var(--fire-deep), var(--fire-mid) 60%, var(--fire-hot)) !important;
+    color: #2a0d00 !important;
+    border: 1px solid #ffe08a !important;
+    font-family: 'Orbitron', sans-serif !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    border-radius: 11px !important;
+    box-shadow: 0 0 22px rgba(255, 122, 0, 0.55);
+}
+[data-testid="stFileUploader"] button:hover {
+    color: #1c0800 !important;
+    box-shadow: 0 0 34px rgba(255, 170, 0, 0.85);
+}
+[data-testid="stFileUploader"] button p,
+[data-testid="stFileUploader"] button span,
+[data-testid="stFileUploader"] button div { color: #2a0d00 !important; }
+
+[data-testid="stAlert"] {
+    border-radius: 14px;
+    border-left: 5px solid var(--fire-mid);
+    background: linear-gradient(100deg, rgba(30, 18, 48, 0.90), rgba(14, 10, 26, 0.86)) !important;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.42);
+    color: #efe6ff !important;
+}
+[data-testid="stAlert"] p { color: #efe6ff !important; }
+
+[data-testid="stExpander"] {
+    border: 1px solid var(--edge) !important;
+    border-radius: 14px !important;
+    background: var(--panel) !important;
+    backdrop-filter: blur(8px);
+}
+
+[data-testid="stDataFrame"], [data-testid="stTable"] {
+    border: 1px solid var(--edge);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 14px 44px rgba(0, 0, 0, 0.48), 0 0 26px rgba(255, 61, 0, 0.10);
+}
+
+/* Dark grid palette. Flagged cells set their own dark text in the styler. */
+[data-testid="stDataFrame"] {
+    --gdg-bg-cell: #100b20;
+    --gdg-bg-cell-medium: #17102b;
+    --gdg-bg-header: #1f1436;
+    --gdg-bg-header-hovered: #2c1c4b;
+    --gdg-bg-header-has-focus: #33205a;
+    --gdg-text-dark: #f2ecff;
+    --gdg-text-medium: #cbbde8;
+    --gdg-text-light: #9a8cba;
+    --gdg-text-header: #ffcf94;
+    --gdg-text-header-selected: #fff6e6;
+    --gdg-border-color: rgba(255, 138, 0, 0.20);
+    --gdg-horizontal-border-color: rgba(255, 138, 0, 0.12);
+    --gdg-accent-color: var(--fire-mid);
+    --gdg-accent-light: rgba(255, 138, 0, 0.16);
+    --gdg-accent-fg: #2a0d00;
+    --gdg-bg-bubble: #1c1233;
+    --gdg-bg-bubble-selected: #2c1c4b;
+    --gdg-bg-search-result: rgba(255, 214, 10, 0.30);
+}
+
+/* Inputs */
+.stSelectbox div[data-baseweb="select"] > div,
+.stMultiSelect div[data-baseweb="select"] > div,
+.stTextInput input, .stDateInput input {
+    background: rgba(16, 11, 30, 0.88) !important;
+    border: 1px solid rgba(255, 138, 0, 0.32) !important;
+    border-radius: 11px !important;
+    color: #f4ecff !important;
+}
+.stSelectbox div[data-baseweb="select"] > div:hover,
+.stMultiSelect div[data-baseweb="select"] > div:hover {
+    border-color: var(--fire-hot) !important;
+    box-shadow: 0 0 18px rgba(255, 138, 0, 0.30);
+}
+.stMultiSelect span[data-baseweb="tag"] {
+    background: linear-gradient(135deg, var(--fire-deep), var(--fire-mid)) !important;
+    color: #2a0d00 !important;
+    font-weight: 700;
+    border-radius: 8px !important;
+}
+
+/* Legend chips */
+.legend-chip {
+    padding: 13px 8px;
+    border-radius: 12px;
+    text-align: center;
+    color: #14060a;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 800;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.legend-chip:hover {
+    transform: translateY(-3px) scale(1.03);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 26px currentColor;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: #0a0716; }
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--fire-mid), var(--fire-deep));
+    border-radius: 8px;
+    border: 2px solid #0a0716;
+}
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, var(--fire-hot), var(--fire-mid)); }
+
+@media (prefers-reduced-motion: reduce) {
+    .stApp::before, .ember, .fire-floor, .hero::before,
+    .hero-title, .hero-rule, .stButton > button[kind="primary"] { animation: none !important; }
+}
+</style>
+"""
+
+_EMBERS = "".join(
+    f'<span class="ember" style="left:{left}%; --drift:{drift}px; '
+    f'width:{size}px; height:{size}px; '
+    f'animation-duration:{duration}s; animation-delay:{delay}s;"></span>'
+    for left, drift, size, duration, delay in [
+        (4, 60, 5, 13, 0.0), (11, -40, 8, 17, 2.4), (19, 30, 4, 11, 5.1),
+        (27, 70, 7, 19, 1.2), (35, -55, 5, 14, 6.8), (43, 25, 9, 21, 3.6),
+        (51, -30, 4, 12, 8.0), (58, 65, 6, 16, 0.8), (66, -45, 8, 20, 4.4),
+        (73, 35, 5, 13, 7.2), (81, -60, 7, 18, 2.0), (88, 40, 4, 15, 5.6),
+        (95, -25, 6, 22, 9.0),
+    ]
+)
+
+st.markdown(THEME_CSS, unsafe_allow_html=True)
 st.markdown(
-    """
-    <style>
-    [data-testid="stToolbar"] {display: none !important;}
-    [data-testid="stDecoration"] {display: none !important;}
-    header {display: none !important;}
-    #MainMenu {visibility: hidden;}
-    </style>
-    """,
+    f'<div class="ember-field">{_EMBERS}</div><div class="fire-floor"></div>',
     unsafe_allow_html=True,
 )
 
@@ -725,9 +1144,9 @@ def render_error_legend():
     for col, (_, info) in zip(legend_cols, ERROR_LEGEND.items()):
         with col:
             st.markdown(
-                f'<div style="background-color:#{info["hex"]}; padding:12px 8px; border-radius:6px; '
-                f'border:2px solid #222; text-align:center; color:#111; font-weight:700;">'
-                f'{info["label"]}</div>',
+                f'<div class="legend-chip" style="background-color:#{info["hex"]}; '
+                f'color:#{info["hex"]};">'
+                f'<span style="color:#14060a;">{info["label"]}</span></div>',
                 unsafe_allow_html=True,
             )
 
@@ -746,7 +1165,8 @@ def style_preview_dataframe(df: pd.DataFrame, cell_flags: Dict[Tuple[int, str], 
             error_type = cell_flags.get((row.name, col_name))
             if error_type and error_type in ERROR_LEGEND:
                 color = ERROR_LEGEND[error_type]["hex"]
-                styles.append(f"background-color: #{color}")
+                # Dark text keeps flagged cells readable on the dark grid theme.
+                styles.append(f"background-color: #{color}; color: #14060a")
             else:
                 styles.append("")
         return styles
@@ -1049,8 +1469,24 @@ def df_to_excel_with_highlight(df: pd.DataFrame, cell_flags: Dict[Tuple[int, str
     return output.read()
 
 
-st.title("FileSort Cleaner")
-st.caption("Upload -> scan -> manual map -> category map -> clean -> download")
+st.markdown(
+    """
+    <div class="hero">
+        <div class="hero-kicker">Sports Timing Solutions</div>
+        <h1 class="hero-title">FileSort Cleaner</h1>
+        <div class="hero-sub">
+            <span class="step">Upload</span><span class="arrow">&#10148;</span>
+            <span class="step">Scan</span><span class="arrow">&#10148;</span>
+            <span class="step">Manual Map</span><span class="arrow">&#10148;</span>
+            <span class="step">Category Map</span><span class="arrow">&#10148;</span>
+            <span class="step">Clean</span><span class="arrow">&#10148;</span>
+            <span class="step">Download</span>
+        </div>
+        <div class="hero-rule"></div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 @st.cache_resource
 def get_persisted_state_store():
