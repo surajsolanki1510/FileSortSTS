@@ -482,6 +482,32 @@ FIELD_LABELS = {
     "emergency_relation": "Emergency Contact Relation",
 }
 
+ESSENTIAL_MAPPING_FIELDS = [
+    "full_name",
+    "first_name",
+    "last_name",
+    "gender",
+    "phone",
+    "dob",
+    "category",
+    "tshirt_size",
+]
+
+RUNNER_COUNT_HINTS = {
+    "name",
+    "first name",
+    "last name",
+    "mobile",
+    "mobile no",
+    "phone",
+    "dob",
+    "birth date",
+    "birthdate",
+    "bib",
+    "registration",
+    "registration number",
+}
+
 ALIASES = {
     "full_name": ["attendee name", "runner name", "full name", "participant name", "name"],
     "first_name": ["first name", "first_name", "firstname", "fname"],
@@ -1826,6 +1852,34 @@ def source_label(source: Dict[str, object]) -> str:
     return file_name
 
 
+def estimate_runner_count(df: pd.DataFrame) -> int:
+    """Estimate runner rows to help Keep/Ignore decisions before mapping."""
+    if df.empty:
+        return 0
+    candidate_cols = []
+    for col in df.columns:
+        norm = normalize_header(col)
+        if any(hint == norm or hint in norm for hint in RUNNER_COUNT_HINTS):
+            candidate_cols.append(col)
+    if not candidate_cols:
+        return len(df)
+    non_blank = pd.Series(False, index=df.index)
+    for col in candidate_cols:
+        values = (
+            df[col]
+            .fillna("")
+            .astype(str)
+            .map(strip_formula)
+            .map(clean_spaces)
+        )
+        non_blank = non_blank | values.ne("")
+    return int(non_blank.sum())
+
+
+def mapped_field_count(mapping: Dict[str, Optional[str]]) -> int:
+    return sum(1 for value in mapping.values() if value)
+
+
 restore_persisted_state()
 if "upload_widget_nonce" not in st.session_state:
     st.session_state["upload_widget_nonce"] = 0
@@ -1920,18 +1974,60 @@ if all_sources:
             clear_loaded_file_state()
             st.rerun()
 
-    st.subheader("Select Sources to Keep")
+    st.subheader("Step A: Choose What to Keep")
     st.caption(
-        "Uncheck sheets/files that should be ignored (for example summary sheets like Count). "
-        "Only checked sources are cleaned and merged."
+        "Quickly keep runner sheets and ignore summary sheets. "
+        "Runner count helps you decide before mapping."
     )
+    source_rows = []
+    for source in all_sources:
+        sid = str(source["source_id"])
+        df = source["df"]  # type: ignore[assignment]
+        runner_rows = estimate_runner_count(df)
+        keep_now = bool(st.session_state["source_keep"].get(sid, source["default_keep"]))
+        suggestion = "Ignore (summary-like)" if not source["default_keep"] else "Keep"
+        source_rows.append(
+            {
+                "Keep": keep_now,
+                "File": str(source["file_name"]),
+                "Sheet": str(source.get("sheet_name") or "(whole file)"),
+                "Runner Rows": runner_rows,
+                "Total Rows": int(source["rows"]),
+                "Columns": len(source["columns"]),  # type: ignore[arg-type]
+                "Suggested": suggestion,
+            }
+        )
+
+    source_df = pd.DataFrame(source_rows).sort_values(
+        by=["Runner Rows", "Total Rows"], ascending=[False, False]
+    )
+    st.dataframe(source_df, hide_index=True, use_container_width=True)
+
+    action_col1, action_col2 = st.columns(2)
+    with action_col1:
+        if st.button("Keep All Suggested", use_container_width=True):
+            for source in all_sources:
+                sid = str(source["source_id"])
+                st.session_state["source_keep"][sid] = bool(source["default_keep"])
+                st.session_state[f"keep_{sid}"] = bool(source["default_keep"])
+            st.rerun()
+    with action_col2:
+        if st.button("Keep All Sources", use_container_width=True):
+            for source in all_sources:
+                sid = str(source["source_id"])
+                st.session_state["source_keep"][sid] = True
+                st.session_state[f"keep_{sid}"] = True
+            st.rerun()
+
+    st.markdown("**Select Sources**")
     for source in all_sources:
         sid = str(source["source_id"])
         sheet = str(source.get("sheet_name") or "(whole file)")
-        default_note = "" if source["default_keep"] else " — looks like a summary sheet"
+        runner_rows = estimate_runner_count(source["df"])  # type: ignore[arg-type]
+        default_note = "summary-like" if not source["default_keep"] else "runner-like"
         keep = st.checkbox(
-            f"**{source['file_name']}** | sheet: `{sheet}` | "
-            f"{source['rows']} rows × {len(source['columns'])} cols{default_note}",
+            f"{source['file_name']} / {sheet} — runners: {runner_rows}, "
+            f"rows: {source['rows']}, cols: {len(source['columns'])} ({default_note})",
             value=bool(st.session_state["source_keep"].get(sid, source["default_keep"])),
             key=f"keep_{sid}",
         )
@@ -1945,26 +2041,33 @@ if all_sources:
         save_persisted_state()
         st.stop()
 
-    st.subheader("Source Previews")
-    for source in kept_sources:
-        with st.expander(f"Preview: {source_label(source)}", expanded=False):
-            st.dataframe(source["df"].head(8), use_container_width=True)  # type: ignore[index]
-
-    st.subheader("Step 1: Manual Column Mapping (per source)")
-    st.write("Map columns separately for each kept file/sheet.")
+    st.subheader("Step B: Map Kept Sources")
+    st.caption("Map only important fields first. Advanced fields are optional.")
 
     source_mappings: Dict[str, Dict[str, Optional[str]]] = {}
-    for source in kept_sources:
+    map_tabs = st.tabs([source_label(source) for source in kept_sources])
+    for tab, source in zip(map_tabs, kept_sources):
         sid = str(source["source_id"])
         df = source["df"]  # type: ignore[assignment]
         cols = list(source["columns"])  # type: ignore[arg-type]
         guessed = guess_mapping(cols)
         options = ["<None>"] + cols
-        with st.expander(f"Mapping: {source_label(source)}", expanded=len(kept_sources) == 1):
+
+        with tab:
+            runner_rows = estimate_runner_count(df)
+            st.caption(
+                f"Runner rows: {runner_rows} | total rows: {source['rows']} | "
+                f"columns: {len(cols)}"
+            )
+            preview_cols = cols[:10]
+            if preview_cols:
+                st.caption("Detected columns: " + ", ".join(preview_cols) + (" ..." if len(cols) > 10 else ""))
             mapping: Dict[str, Optional[str]] = {}
-            cols_ui = st.columns(2)
-            for idx, field in enumerate(CANONICAL_FIELDS):
-                col_ui = cols_ui[idx % 2]
+
+            st.markdown("**Essential Mapping**")
+            essential_cols_ui = st.columns(2)
+            for idx, field in enumerate(ESSENTIAL_MAPPING_FIELDS):
+                col_ui = essential_cols_ui[idx % 2]
                 key = map_key(sid, field)
                 default = guessed.get(field)
                 if key in st.session_state:
@@ -1980,6 +2083,26 @@ if all_sources:
                 )
                 mapping[field] = None if picked == "<None>" else picked
 
+            with st.expander("Advanced Mapping (optional)", expanded=False):
+                advanced_fields = [f for f in CANONICAL_FIELDS if f not in ESSENTIAL_MAPPING_FIELDS]
+                adv_cols_ui = st.columns(2)
+                for idx, field in enumerate(advanced_fields):
+                    col_ui = adv_cols_ui[idx % 2]
+                    key = map_key(sid, field)
+                    default = guessed.get(field)
+                    if key in st.session_state:
+                        current = st.session_state[key]
+                        default_index = options.index(current) if current in options else 0
+                    else:
+                        default_index = options.index(default) if default in options else 0
+                    picked = col_ui.selectbox(
+                        FIELD_LABELS[field],
+                        options=options,
+                        index=default_index,
+                        key=key,
+                    )
+                    mapping[field] = None if picked == "<None>" else picked
+
             dob_col = mapping.get("dob")
             if dob_col:
                 extra_dob_cols = [
@@ -1990,6 +2113,11 @@ if all_sources:
                         "DOB merge enabled: will use first non-empty value from -> "
                         + ", ".join([dob_col] + extra_dob_cols)
                     )
+
+            mapped_count = mapped_field_count(mapping)
+            st.caption(f"Mapped fields: {mapped_count}/{len(CANONICAL_FIELDS)}")
+            with st.expander("Preview first 8 rows", expanded=False):
+                st.dataframe(df.head(8), use_container_width=True)
             source_mappings[sid] = mapping
 
     age_as_on = st.date_input(
