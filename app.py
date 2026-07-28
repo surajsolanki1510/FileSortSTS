@@ -484,20 +484,60 @@ FIELD_LABELS = {
 
 ALIASES = {
     "full_name": ["attendee name", "runner name", "full name", "participant name", "name"],
-    "first_name": ["first name", "first_name", "fname"],
-    "last_name": ["last name", "last_name", "lname", "surname"],
+    "first_name": ["first name", "first_name", "firstname", "fname"],
+    "last_name": ["last name", "last_name", "lastname", "lname", "surname"],
     "gender": ["gender", "sex"],
-    "phone": ["contact number", "mobile", "phone", "telephone", "mobile number", "contact no"],
-    "dob": ["date of birth", "dob", "birth date", "date_of_birth"],
-    "category": ["ticket_name", "race category", "event category", "distance", "registration category", "category"],
-    "tshirt_size": ["t shirt size", "t-shirt size", "tshirt size", "t-shirt", "shirt size"],
+    "phone": [
+        "contact number",
+        "mobile",
+        "mobile no",
+        "phone",
+        "telephone",
+        "mobile number",
+        "contact no",
+    ],
+    "dob": [
+        "date of birth",
+        "dob",
+        "birth date",
+        "birthdate",
+        "birth_date",
+        "date_of_birth",
+    ],
+    "category": [
+        "ticket_name",
+        "race category",
+        "racecategory",
+        "event category",
+        "distance",
+        "registration category",
+        "category",
+    ],
+    "tshirt_size": [
+        "t shirt size",
+        "t-shirt size",
+        "tshirt size",
+        "t-shirt",
+        "tshirt",
+        "shirt size",
+    ],
     "blood_group": ["blood group", "bloodgroup"],
     "address": ["address"],
     "city": ["city"],
     "state": ["state", "state (india)"],
     "country": ["country"],
-    "emergency_name": ["emergency contact name", "emergency name", "emergency contact person"],
-    "emergency_phone": ["emergency contact number", "emergency phone", "emergency no", "emergency contact no"],
+    "emergency_name": [
+        "emergency contact name",
+        "emergency name",
+        "emergency contact person",
+    ],
+    "emergency_phone": [
+        "emergency contact number",
+        "emergency phone",
+        "emergency number",
+        "emergency no",
+        "emergency contact no",
+    ],
     "emergency_relation": ["emergency contact relation", "emergency relation", "relationship"],
 }
 
@@ -956,8 +996,12 @@ def clean_emergency_relation(raw: str) -> Tuple[str, Optional[str]]:
 
 
 def is_dob_column(col_name: str) -> bool:
-    norm = re.sub(r"[^a-z0-9]+", " ", str(col_name).lower()).strip()
-    return norm.startswith("date of birth") or norm == "dob" or norm == "date of birth"
+    norm = normalize_header(col_name)
+    return (
+        norm.startswith("date of birth")
+        or norm in {"dob", "birth date", "birthdate"}
+        or "birth date" in norm
+    )
 
 
 def find_dob_source_columns(df: pd.DataFrame, primary: Optional[str]) -> List[str]:
@@ -1008,20 +1052,56 @@ def calculate_age_from_dob(dob_value: str, age_as_on: date) -> str:
     return str(max(0, years))
 
 
+def normalize_header(value: object) -> str:
+    text = str(value)
+    # Split camelCase / PascalCase so firstName -> first Name.
+    text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
 def guess_mapping(columns) -> Dict[str, Optional[str]]:
     guessed = {field: None for field in CANONICAL_FIELDS}
-    lowered = {col: re.sub(r"[^a-z0-9]+", " ", str(col).lower()).strip() for col in columns}
+    lowered = {col: normalize_header(col) for col in columns}
+    used_cols = set()
 
+    def claim(field: str, col: object) -> bool:
+        if guessed[field] is not None or col in used_cols:
+            return False
+        guessed[field] = col
+        used_cols.add(col)
+        return True
+
+    # Pass 1: exact header == alias
     for field, names in ALIASES.items():
+        alias_norms = {normalize_header(alias) for alias in names}
         for col, normalized in lowered.items():
+            if normalized in alias_norms and claim(field, col):
+                break
+
+    # Pass 2: alias is a full token in the header (avoids "name" matching "first name")
+    for field, names in ALIASES.items():
+        if guessed[field] is not None:
+            continue
+        for col, normalized in lowered.items():
+            tokens = set(normalized.split())
             for alias in names:
-                alias_norm = re.sub(r"[^a-z0-9]+", " ", alias.lower()).strip()
-                if normalized == alias_norm or alias_norm in normalized:
-                    if guessed[field] is None:
-                        guessed[field] = col
+                alias_norm = normalize_header(alias)
+                alias_tokens = alias_norm.split()
+                if not alias_tokens:
+                    continue
+                if len(alias_tokens) == 1:
+                    token = alias_tokens[0]
+                    # Bare "name" is too generic for substring/token matching.
+                    if token == "name":
+                        if normalized == "name" and claim(field, col):
+                            break
+                    elif token in tokens and claim(field, col):
+                        break
+                elif all(t in tokens for t in alias_tokens) and claim(field, col):
                     break
             if guessed[field] is not None:
                 break
+
     return guessed
 
 
@@ -1081,9 +1161,38 @@ def dedupe_headers(headers: List[str]) -> List[str]:
     return result
 
 
-def read_xlsx_with_display_dates(file_bytes: bytes) -> pd.DataFrame:
-    workbook = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
-    worksheet = workbook.active
+SUMMARY_SHEET_HINTS = (
+    "count",
+    "counts",
+    "summary",
+    "total",
+    "totals",
+    "pivot",
+    "dashboard",
+    "stats",
+    "statistic",
+    "report",
+)
+
+PERSON_COLUMN_HINTS = (
+    "name",
+    "first name",
+    "lastname",
+    "last name",
+    "mobile",
+    "phone",
+    "dob",
+    "birth",
+    "gender",
+    "email",
+    "bib",
+    "category",
+    "tshirt",
+    "t shirt",
+)
+
+
+def worksheet_to_dataframe(worksheet) -> pd.DataFrame:
     headers: Optional[List[str]] = None
     data: List[List[str]] = []
     for row in worksheet.iter_rows():
@@ -1092,7 +1201,6 @@ def read_xlsx_with_display_dates(file_bytes: bytes) -> pd.DataFrame:
             headers = cells
         else:
             data.append(cells)
-    workbook.close()
 
     if not headers:
         return pd.DataFrame()
@@ -1105,18 +1213,110 @@ def read_xlsx_with_display_dates(file_bytes: bytes) -> pd.DataFrame:
     return pd.DataFrame(normalized, columns=columns).fillna("")
 
 
+def read_xlsx_all_sheets(file_bytes: bytes) -> Dict[str, pd.DataFrame]:
+    workbook = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+    sheets: Dict[str, pd.DataFrame] = {}
+    for sheet_name in workbook.sheetnames:
+        sheets[sheet_name] = worksheet_to_dataframe(workbook[sheet_name])
+    workbook.close()
+    return sheets
+
+
+def read_xlsx_with_display_dates(file_bytes: bytes) -> pd.DataFrame:
+    sheets = read_xlsx_all_sheets(file_bytes)
+    if not sheets:
+        return pd.DataFrame()
+    return next(iter(sheets.values()))
+
+
+def looks_like_summary_sheet(sheet_name: str, df: pd.DataFrame) -> bool:
+    name = re.sub(r"[^a-z0-9]+", " ", str(sheet_name).lower()).strip()
+    tokens = set(name.split())
+    if name in SUMMARY_SHEET_HINTS or tokens.intersection(SUMMARY_SHEET_HINTS):
+        return True
+    if any(hint in name for hint in SUMMARY_SHEET_HINTS):
+        return True
+
+    cols_norm = [
+        re.sub(r"[^a-z0-9]+", " ", str(c).lower()).strip() for c in df.columns
+    ]
+    has_person_col = any(
+        any(hint == col or hint in col for hint in PERSON_COLUMN_HINTS)
+        for col in cols_norm
+    )
+    if not has_person_col and len(df) <= 50:
+        return True
+    return False
+
+
+def make_source_id(file_id: str, sheet_name: Optional[str]) -> str:
+    return f"{file_id}::{sheet_name or '__file__'}"
+
+
+def map_key(source_id: str, field: str) -> str:
+    return f"map::{source_id}::{field}"
+
+
 @st.cache_data(show_spinner=False)
-def read_uploaded_file_cached(file_bytes: bytes, filename: str) -> pd.DataFrame:
-    filename = filename.lower()
-    uploaded_file = io.BytesIO(file_bytes)
-    if filename.endswith(".csv"):
-        return pd.read_csv(uploaded_file, dtype=str, keep_default_na=False).fillna("")
-    if filename.endswith(".xlsx"):
-        return read_xlsx_with_display_dates(file_bytes)
-    if filename.endswith(".xls"):
-        # Try old Excel first, fallback to HTML-table style xls.
+def discover_file_sources(file_bytes: bytes, filename: str) -> List[Dict[str, object]]:
+    """Return one source entry per CSV file or Excel sheet."""
+    lower = filename.lower()
+    sources: List[Dict[str, object]] = []
+    file_id = hashlib.md5(file_bytes).hexdigest()
+
+    if lower.endswith(".csv"):
+        uploaded_file = io.BytesIO(file_bytes)
+        df = pd.read_csv(uploaded_file, dtype=str, keep_default_na=False).fillna("")
+        sources.append(
+            {
+                "source_id": make_source_id(file_id, None),
+                "file_id": file_id,
+                "file_name": filename,
+                "sheet_name": "",
+                "default_keep": True,
+                "rows": len(df),
+                "columns": list(df.columns),
+                "df": df,
+            }
+        )
+        return sources
+
+    if lower.endswith(".xlsx"):
+        sheets = read_xlsx_all_sheets(file_bytes)
+        for sheet_name, df in sheets.items():
+            sources.append(
+                {
+                    "source_id": make_source_id(file_id, sheet_name),
+                    "file_id": file_id,
+                    "file_name": filename,
+                    "sheet_name": sheet_name,
+                    "default_keep": not looks_like_summary_sheet(sheet_name, df),
+                    "rows": len(df),
+                    "columns": list(df.columns),
+                    "df": df,
+                }
+            )
+        return sources
+
+    if lower.endswith(".xls"):
+        uploaded_file = io.BytesIO(file_bytes)
         try:
-            return pd.read_excel(uploaded_file, dtype=str).fillna("")
+            excel = pd.ExcelFile(uploaded_file)
+            for sheet_name in excel.sheet_names:
+                df = pd.read_excel(excel, sheet_name=sheet_name, dtype=str).fillna("")
+                sources.append(
+                    {
+                        "source_id": make_source_id(file_id, sheet_name),
+                        "file_id": file_id,
+                        "file_name": filename,
+                        "sheet_name": sheet_name,
+                        "default_keep": not looks_like_summary_sheet(sheet_name, df),
+                        "rows": len(df),
+                        "columns": list(df.columns),
+                        "df": df,
+                    }
+                )
+            return sources
         except Exception:
             uploaded_file.seek(0)
             html = uploaded_file.read().decode("utf-8", errors="replace")
@@ -1124,13 +1324,87 @@ def read_uploaded_file_cached(file_bytes: bytes, filename: str) -> pd.DataFrame:
             if len(df) > 0 and str(df.iloc[0, 0]).strip().lower() in {"first name", "name"}:
                 df.columns = df.iloc[0]
                 df = df.iloc[1:].reset_index(drop=True)
-            return df.astype(str).fillna("")
+            df = df.astype(str).fillna("")
+            sources.append(
+                {
+                    "source_id": make_source_id(file_id, None),
+                    "file_id": file_id,
+                    "file_name": filename,
+                    "sheet_name": "",
+                    "default_keep": True,
+                    "rows": len(df),
+                    "columns": list(df.columns),
+                    "df": df,
+                }
+            )
+            return sources
+
     raise ValueError("Unsupported file format")
+
+
+@st.cache_data(show_spinner=False)
+def read_uploaded_file_cached(file_bytes: bytes, filename: str) -> pd.DataFrame:
+    sources = discover_file_sources(file_bytes, filename)
+    if not sources:
+        return pd.DataFrame()
+    return sources[0]["df"]  # type: ignore[return-value]
 
 
 def read_uploaded_file(uploaded_file) -> pd.DataFrame:
     file_bytes = uploaded_file.getvalue()
     return read_uploaded_file_cached(file_bytes, uploaded_file.name)
+
+
+CLEANED_COLUMN_ORDER = [
+    "Full Name",
+    "First Name",
+    "Last Name",
+    "Gender",
+    "Phone",
+    "Date of Birth",
+    "Age",
+    "Category",
+    "T-Shirt Size",
+    "Blood Group",
+    "Address",
+    "City",
+    "State",
+    "Country",
+    "Emergency First Name",
+    "Emergency Last Name",
+    "Emergency Full Name",
+    "Emergency Phone",
+    "Emergency Relation",
+]
+
+
+def merge_cleaned_frames(
+    parts: List[Tuple[pd.DataFrame, Dict[Tuple[int, str], str], str, str]]
+) -> Tuple[pd.DataFrame, Dict[Tuple[int, str], str]]:
+    """Union-merge cleaned frames; keep every column; remapped cell flags."""
+    if not parts:
+        return pd.DataFrame(), {}
+
+    frames: List[pd.DataFrame] = []
+    merged_flags: Dict[Tuple[int, str], str] = {}
+    offset = 0
+    for cleaned_df, cell_flags, file_name, sheet_name in parts:
+        part = cleaned_df.copy()
+        part["Source File"] = file_name
+        part["Source Sheet"] = sheet_name or ""
+        frames.append(part)
+        for (row_idx, col_name), flag in cell_flags.items():
+            merged_flags[(row_idx + offset, col_name)] = flag
+        offset += len(part)
+
+    merged = pd.concat(frames, ignore_index=True, sort=False).fillna("")
+    cleaned_order = [c for c in CLEANED_COLUMN_ORDER if c in merged.columns]
+    extra_cols = [c for c in merged.columns if c not in cleaned_order]
+    # Keep Source File / Source Sheet near the front of extras for clarity.
+    source_cols = [c for c in ("Source File", "Source Sheet") if c in extra_cols]
+    other_extras = [c for c in extra_cols if c not in source_cols]
+    final = merged[cleaned_order + source_cols + other_extras].copy()
+    return sort_cleaned_df(final, merged_flags)
 
 
 def mark_name_issue(cell_flags: Dict[Tuple[int, str], str], row_idx: int, columns: List[str]):
@@ -1326,28 +1600,7 @@ def apply_cleaning(
         out["Country"] = ["India"] * len(out)
 
     # Keep cleaned-first order.
-    cleaned_order = [
-        "Full Name",
-        "First Name",
-        "Last Name",
-        "Gender",
-        "Phone",
-        "Date of Birth",
-        "Age",
-        "Category",
-        "T-Shirt Size",
-        "Blood Group",
-        "Address",
-        "City",
-        "State",
-        "Country",
-        "Emergency First Name",
-        "Emergency Last Name",
-        "Emergency Full Name",
-        "Emergency Phone",
-        "Emergency Relation",
-    ]
-    cleaned_order = [c for c in cleaned_order if c in out.columns]
+    cleaned_order = [c for c in CLEANED_COLUMN_ORDER if c in out.columns]
 
     mapped_sources = {src for src in mapping.values() if src}
     if dob_primary:
@@ -1476,11 +1729,10 @@ st.markdown(
         <h1 class="hero-title">FileSort Cleaner</h1>
         <div class="hero-sub">
             <span class="step">Upload</span><span class="arrow">&#10148;</span>
-            <span class="step">Scan</span><span class="arrow">&#10148;</span>
-            <span class="step">Manual Map</span><span class="arrow">&#10148;</span>
-            <span class="step">Category Map</span><span class="arrow">&#10148;</span>
+            <span class="step">Keep Sheets</span><span class="arrow">&#10148;</span>
+            <span class="step">Map Each</span><span class="arrow">&#10148;</span>
             <span class="step">Clean</span><span class="arrow">&#10148;</span>
-            <span class="step">Download</span>
+            <span class="step">Merge Download</span>
         </div>
         <div class="hero-rule"></div>
     </div>
@@ -1516,9 +1768,9 @@ def save_persisted_state():
     store = get_persisted_state_store()
     sid = get_session_persist_id()
     keys_to_persist = [
-        "active_file_bytes",
-        "active_file_name",
-        "active_file_id",
+        "loaded_files",
+        "loaded_batch_id",
+        "source_keep",
         "category_map_df",
         "category_map_source",
         "category_groups",
@@ -1527,101 +1779,219 @@ def save_persisted_state():
         "tshirt_groups",
         "age_as_on_date",
         "upload_widget_nonce",
-    ] + [f"map_{field}" for field in CANONICAL_FIELDS]
-    store[sid] = {k: st.session_state[k] for k in keys_to_persist if k in st.session_state}
-
-
-restore_persisted_state()
-if "upload_widget_nonce" not in st.session_state:
-    st.session_state["upload_widget_nonce"] = 0
-
-upload_key = f"source_upload_{st.session_state['upload_widget_nonce']}"
-uploaded = st.file_uploader("Upload CSV/XLSX/XLS", type=["csv", "xlsx", "xls"], key=upload_key)
+    ]
+    snapshot = {k: st.session_state[k] for k in keys_to_persist if k in st.session_state}
+    for key in list(st.session_state.keys()):
+        if isinstance(key, str) and key.startswith("map::"):
+            snapshot[key] = st.session_state[key]
+    store[sid] = snapshot
 
 
 def clear_loaded_file_state():
     sid = get_session_persist_id()
     get_persisted_state_store().pop(sid, None)
     for key in [
-        "active_file_bytes",
-        "active_file_name",
-        "active_file_id",
+        "loaded_files",
+        "loaded_batch_id",
+        "source_keep",
         "category_map_df",
         "category_map_source",
         "category_groups",
         "tshirt_map_df",
         "tshirt_map_source",
         "tshirt_groups",
+        "age_as_on_date",
     ]:
         st.session_state.pop(key, None)
-    for field in CANONICAL_FIELDS:
-        st.session_state.pop(f"map_{field}", None)
-    st.session_state.pop("age_as_on_date", None)
+    for key in list(st.session_state.keys()):
+        if isinstance(key, str) and (
+            key.startswith("map::")
+            or key.startswith("map_")
+            or key.startswith("keep_")
+            or key.startswith("bulk_")
+            or key.startswith("tshirt_bulk_")
+        ):
+            st.session_state.pop(key, None)
+    # Legacy single-file keys
+    for key in ("active_file_bytes", "active_file_name", "active_file_id"):
+        st.session_state.pop(key, None)
     st.session_state["upload_widget_nonce"] = st.session_state.get("upload_widget_nonce", 0) + 1
 
 
-if uploaded is not None:
-    current_bytes = uploaded.getvalue()
-    current_file_id = hashlib.md5(current_bytes).hexdigest()
-    if st.session_state.get("active_file_id") != current_file_id:
-        clear_loaded_file_state()
-        st.session_state["active_file_bytes"] = current_bytes
-        st.session_state["active_file_name"] = uploaded.name
-        st.session_state["active_file_id"] = current_file_id
+def source_label(source: Dict[str, object]) -> str:
+    sheet = str(source.get("sheet_name") or "")
+    file_name = str(source.get("file_name") or "")
+    if sheet:
+        return f"{file_name} / {sheet}"
+    return file_name
 
-src_df: Optional[pd.DataFrame] = None
-if st.session_state.get("active_file_bytes"):
-    try:
-        src_df = read_uploaded_file_cached(
-            st.session_state["active_file_bytes"],
-            st.session_state["active_file_name"],
+
+restore_persisted_state()
+if "upload_widget_nonce" not in st.session_state:
+    st.session_state["upload_widget_nonce"] = 0
+if "source_keep" not in st.session_state:
+    st.session_state["source_keep"] = {}
+if "loaded_files" not in st.session_state:
+    st.session_state["loaded_files"] = {}
+
+upload_key = f"source_upload_{st.session_state['upload_widget_nonce']}"
+uploaded_files = st.file_uploader(
+    "Upload CSV/XLSX/XLS (multiple files allowed)",
+    type=["csv", "xlsx", "xls"],
+    accept_multiple_files=True,
+    key=upload_key,
+)
+
+if uploaded_files:
+    batch_files = []
+    for uploaded in uploaded_files:
+        file_bytes = uploaded.getvalue()
+        file_id = hashlib.md5(file_bytes).hexdigest()
+        batch_files.append(
+            {
+                "file_id": file_id,
+                "file_name": uploaded.name,
+                "file_bytes": file_bytes,
+            }
         )
-    except Exception as exc:
-        st.error(f"Could not read file: {exc}")
-        st.stop()
+    batch_id = hashlib.md5(
+        "|".join(sorted(f["file_id"] for f in batch_files)).encode("utf-8")
+    ).hexdigest()
+    if st.session_state.get("loaded_batch_id") != batch_id:
+        # Reset maps/keep flags for the new batch, but do not remount the uploader
+        # (that would wipe the just-selected files).
+        for key in [
+            "category_map_df",
+            "category_map_source",
+            "category_groups",
+            "tshirt_map_df",
+            "tshirt_map_source",
+            "tshirt_groups",
+            "age_as_on_date",
+        ]:
+            st.session_state.pop(key, None)
+        for key in list(st.session_state.keys()):
+            if isinstance(key, str) and (
+                key.startswith("map::")
+                or key.startswith("keep_")
+                or key.startswith("bulk_")
+                or key.startswith("tshirt_bulk_")
+            ):
+                st.session_state.pop(key, None)
+        st.session_state["loaded_files"] = {
+            f["file_id"]: {"file_name": f["file_name"], "file_bytes": f["file_bytes"]}
+            for f in batch_files
+        }
+        st.session_state["loaded_batch_id"] = batch_id
+        st.session_state["source_keep"] = {}
 
-if src_df is not None:
+all_sources: List[Dict[str, object]] = []
+load_errors: List[str] = []
+if st.session_state.get("loaded_files"):
+    for file_id, meta in st.session_state["loaded_files"].items():
+        try:
+            discovered = discover_file_sources(meta["file_bytes"], meta["file_name"])
+            all_sources.extend(discovered)
+        except Exception as exc:
+            load_errors.append(f"{meta['file_name']}: {exc}")
+
+if load_errors:
+    for msg in load_errors:
+        st.error(f"Could not read file: {msg}")
+
+if all_sources:
+    # Initialize keep flags (default from heuristic; preserve existing choices).
+    for source in all_sources:
+        sid = str(source["source_id"])
+        if sid not in st.session_state["source_keep"]:
+            st.session_state["source_keep"][sid] = bool(source["default_keep"])
+
     top_left, top_right = st.columns([3, 1])
     with top_left:
+        kept_count = sum(
+            1 for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)
+        )
         st.success(
-            f"Loaded file `{st.session_state.get('active_file_name', '')}` with "
-            f"{len(src_df)} rows and {len(src_df.columns)} columns."
+            f"Loaded {len(st.session_state['loaded_files'])} file(s) → "
+            f"{len(all_sources)} sheet/source(s). Keeping {kept_count}."
         )
     with top_right:
-        if st.button("Remove Loaded File", type="secondary", use_container_width=True):
+        if st.button("Remove Loaded Files", type="secondary", use_container_width=True):
             clear_loaded_file_state()
             st.rerun()
 
-    st.dataframe(src_df.head(8), use_container_width=True)
-
-    guessed = guess_mapping(src_df.columns)
-    options = ["<None>"] + list(src_df.columns)
-
-    st.subheader("Step 1: Manual Column Mapping (after scan)")
-    st.write("Confirm the correct source column for each target field.")
-
-    mapping: Dict[str, Optional[str]] = {}
-    cols_ui = st.columns(2)
-    for idx, field in enumerate(CANONICAL_FIELDS):
-        col_ui = cols_ui[idx % 2]
-        default = guessed.get(field)
-        default_index = options.index(default) if default in options else 0
-        picked = col_ui.selectbox(
-            FIELD_LABELS[field],
-            options=options,
-            index=default_index,
-            key=f"map_{field}",
+    st.subheader("Select Sources to Keep")
+    st.caption(
+        "Uncheck sheets/files that should be ignored (for example summary sheets like Count). "
+        "Only checked sources are cleaned and merged."
+    )
+    for source in all_sources:
+        sid = str(source["source_id"])
+        sheet = str(source.get("sheet_name") or "(whole file)")
+        default_note = "" if source["default_keep"] else " — looks like a summary sheet"
+        keep = st.checkbox(
+            f"**{source['file_name']}** | sheet: `{sheet}` | "
+            f"{source['rows']} rows × {len(source['columns'])} cols{default_note}",
+            value=bool(st.session_state["source_keep"].get(sid, source["default_keep"])),
+            key=f"keep_{sid}",
         )
-        mapping[field] = None if picked == "<None>" else picked
+        st.session_state["source_keep"][sid] = keep
 
-    dob_col = mapping.get("dob")
-    if dob_col:
-        extra_dob_cols = [c for c in find_dob_source_columns(src_df, dob_col) if c != dob_col]
-        if extra_dob_cols:
-            st.caption(
-                "DOB merge enabled: will use first non-empty value from -> "
-                + ", ".join([dob_col] + extra_dob_cols)
-            )
+    kept_sources = [
+        s for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)
+    ]
+    if not kept_sources:
+        st.warning("Select at least one source to keep before mapping/cleaning.")
+        save_persisted_state()
+        st.stop()
+
+    st.subheader("Source Previews")
+    for source in kept_sources:
+        with st.expander(f"Preview: {source_label(source)}", expanded=False):
+            st.dataframe(source["df"].head(8), use_container_width=True)  # type: ignore[index]
+
+    st.subheader("Step 1: Manual Column Mapping (per source)")
+    st.write("Map columns separately for each kept file/sheet.")
+
+    source_mappings: Dict[str, Dict[str, Optional[str]]] = {}
+    for source in kept_sources:
+        sid = str(source["source_id"])
+        df = source["df"]  # type: ignore[assignment]
+        cols = list(source["columns"])  # type: ignore[arg-type]
+        guessed = guess_mapping(cols)
+        options = ["<None>"] + cols
+        with st.expander(f"Mapping: {source_label(source)}", expanded=len(kept_sources) == 1):
+            mapping: Dict[str, Optional[str]] = {}
+            cols_ui = st.columns(2)
+            for idx, field in enumerate(CANONICAL_FIELDS):
+                col_ui = cols_ui[idx % 2]
+                key = map_key(sid, field)
+                default = guessed.get(field)
+                if key in st.session_state:
+                    current = st.session_state[key]
+                    default_index = options.index(current) if current in options else 0
+                else:
+                    default_index = options.index(default) if default in options else 0
+                picked = col_ui.selectbox(
+                    FIELD_LABELS[field],
+                    options=options,
+                    index=default_index,
+                    key=key,
+                )
+                mapping[field] = None if picked == "<None>" else picked
+
+            dob_col = mapping.get("dob")
+            if dob_col:
+                extra_dob_cols = [
+                    c for c in find_dob_source_columns(df, dob_col) if c != dob_col  # type: ignore[arg-type]
+                ]
+                if extra_dob_cols:
+                    st.caption(
+                        "DOB merge enabled: will use first non-empty value from -> "
+                        + ", ".join([dob_col] + extra_dob_cols)
+                    )
+            source_mappings[sid] = mapping
+
     age_as_on = st.date_input(
         "Age calculation date (as on)",
         value=date.today(),
@@ -1629,23 +1999,36 @@ if src_df is not None:
         key="age_as_on_date",
     )
 
+    # Aggregate category / t-shirt values across kept sources.
     category_map: Dict[str, str] = {}
     tshirt_map: Dict[str, str] = {}
-    cat_col = mapping.get("category")
-    if cat_col:
-        st.subheader("Step 2: Category Manual Mapping")
-        cat_series = (
-            src_df[cat_col]
+
+    cat_series_parts: List[pd.Series] = []
+    for source in kept_sources:
+        sid = str(source["source_id"])
+        cat_col = source_mappings[sid].get("category")
+        if not cat_col:
+            continue
+        df = source["df"]  # type: ignore[assignment]
+        part = (
+            df[cat_col]
             .fillna("")
             .astype(str)
             .map(strip_formula)
             .map(clean_spaces)
             .replace("", ".")
         )
-        raw_categories = cat_series.drop_duplicates().tolist()
-        raw_categories = sorted(raw_categories)
+        cat_series_parts.append(part)
+
+    if cat_series_parts:
+        st.subheader("Step 2: Category Manual Mapping")
+        cat_series = pd.concat(cat_series_parts, ignore_index=True)
+        raw_categories = sorted(cat_series.drop_duplicates().tolist())
         cat_counts = cat_series.value_counts().to_dict()
-        if "category_map_df" not in st.session_state or st.session_state.get("category_map_source") != tuple(raw_categories):
+        if (
+            "category_map_df" not in st.session_state
+            or st.session_state.get("category_map_source") != tuple(raw_categories)
+        ):
             st.session_state["category_map_df"] = pd.DataFrame(
                 {"Raw Category": raw_categories, "Mapped Category": raw_categories}
             )
@@ -1655,8 +2038,6 @@ if src_df is not None:
             st.session_state["category_groups"] = [{"selected": [], "name": ""}]
 
         st.info("Map similar categories together in groups, then apply all mappings.")
-
-        # Multi-group mapping UI.
         st.markdown("**Quick Group Mapping**")
         for idx, grp in enumerate(st.session_state["category_groups"]):
             st.markdown(f"**Group {idx + 1}**")
@@ -1666,7 +2047,9 @@ if src_df is not None:
                     continue
                 used_by_other_groups.update(other_grp.get("selected", []))
             available_options = [
-                cat for cat in raw_categories if cat not in used_by_other_groups or cat in grp.get("selected", [])
+                cat
+                for cat in raw_categories
+                if cat not in used_by_other_groups or cat in grp.get("selected", [])
             ]
             current_default = [cat for cat in grp.get("selected", []) if cat in available_options]
             left, right = st.columns([2, 1])
@@ -1685,7 +2068,6 @@ if src_df is not None:
                     key=f"bulk_mapped_name_{idx}",
                     placeholder="e.g. 10KM Defense",
                 )
-
 
         btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
         with btn_col1:
@@ -1723,8 +2105,6 @@ if src_df is not None:
             st.success("Reset complete. All mapped values restored to original raw categories.")
 
         map_df = st.session_state["category_map_df"]
-
-        # Friendly summary table.
         summary_df = map_df.copy()
         summary_df["Rows"] = summary_df["Raw Category"].map(lambda x: cat_counts.get(x, 0))
         summary_df = summary_df[["Raw Category", "Rows", "Mapped Category"]].sort_values(
@@ -1736,23 +2116,34 @@ if src_df is not None:
         for _, row in map_df.iterrows():
             category_map[str(row["Raw Category"])] = str(row["Mapped Category"]).strip() or "."
     else:
-        st.info("No category column selected. Category output will be '.'")
+        st.info("No category column selected on any kept source. Category output will be '.' where mapped.")
 
-    tshirt_col = mapping.get("tshirt_size")
-    if tshirt_col:
-        st.subheader("Step 3: T-Shirt Size Manual Mapping")
-        tshirt_series = (
-            src_df[tshirt_col]
+    tshirt_series_parts: List[pd.Series] = []
+    for source in kept_sources:
+        sid = str(source["source_id"])
+        tshirt_col = source_mappings[sid].get("tshirt_size")
+        if not tshirt_col:
+            continue
+        df = source["df"]  # type: ignore[assignment]
+        part = (
+            df[tshirt_col]
             .fillna("")
             .astype(str)
             .map(strip_formula)
             .map(clean_spaces)
             .replace("", ".")
         )
-        raw_tshirts = tshirt_series.drop_duplicates().tolist()
-        raw_tshirts = sorted(raw_tshirts)
+        tshirt_series_parts.append(part)
+
+    if tshirt_series_parts:
+        st.subheader("Step 3: T-Shirt Size Manual Mapping")
+        tshirt_series = pd.concat(tshirt_series_parts, ignore_index=True)
+        raw_tshirts = sorted(tshirt_series.drop_duplicates().tolist())
         tshirt_counts = tshirt_series.value_counts().to_dict()
-        if "tshirt_map_df" not in st.session_state or st.session_state.get("tshirt_map_source") != tuple(raw_tshirts):
+        if (
+            "tshirt_map_df" not in st.session_state
+            or st.session_state.get("tshirt_map_source") != tuple(raw_tshirts)
+        ):
             st.session_state["tshirt_map_df"] = pd.DataFrame(
                 {"Raw T-Shirt Size": raw_tshirts, "Mapped T-Shirt Size": raw_tshirts}
             )
@@ -1771,7 +2162,9 @@ if src_df is not None:
                     continue
                 used_by_other_groups.update(other_grp.get("selected", []))
             available_options = [
-                size for size in raw_tshirts if size not in used_by_other_groups or size in grp.get("selected", [])
+                size
+                for size in raw_tshirts
+                if size not in used_by_other_groups or size in grp.get("selected", [])
             ]
             current_default = [size for size in grp.get("selected", []) if size in available_options]
             left, right = st.columns([2, 1])
@@ -1811,7 +2204,9 @@ if src_df is not None:
                 selected_raw = grp.get("selected", [])
                 if not selected_raw or not mapped_name:
                     continue
-                tmp_df.loc[tmp_df["Raw T-Shirt Size"].isin(selected_raw), "Mapped T-Shirt Size"] = mapped_name
+                tmp_df.loc[
+                    tmp_df["Raw T-Shirt Size"].isin(selected_raw), "Mapped T-Shirt Size"
+                ] = mapped_name
                 applied += len(selected_raw)
             if applied == 0:
                 st.warning("Add at least one valid T-shirt group (selected values + mapped name).")
@@ -1828,7 +2223,9 @@ if src_df is not None:
 
         tshirt_df = st.session_state["tshirt_map_df"]
         tshirt_summary_df = tshirt_df.copy()
-        tshirt_summary_df["Rows"] = tshirt_summary_df["Raw T-Shirt Size"].map(lambda x: tshirt_counts.get(x, 0))
+        tshirt_summary_df["Rows"] = tshirt_summary_df["Raw T-Shirt Size"].map(
+            lambda x: tshirt_counts.get(x, 0)
+        )
         tshirt_summary_df = tshirt_summary_df[
             ["Raw T-Shirt Size", "Rows", "Mapped T-Shirt Size"]
         ].sort_values(by=["Mapped T-Shirt Size", "Raw T-Shirt Size"])
@@ -1838,13 +2235,33 @@ if src_df is not None:
         for _, row in tshirt_df.iterrows():
             tshirt_map[str(row["Raw T-Shirt Size"])] = str(row["Mapped T-Shirt Size"]).strip() or "."
     else:
-        st.info("No T-shirt size column selected. T-Shirt Size output will be '.'")
+        st.info("No T-shirt size column selected on any kept source. T-Shirt Size output will be '.' where mapped.")
 
     st.subheader("Error Highlight Guide")
     render_error_legend()
 
     if st.button("Run Cleaning", type="primary"):
-        cleaned_df, cell_flags = apply_cleaning(src_df, mapping, category_map, tshirt_map, age_as_on)
+        parts: List[Tuple[pd.DataFrame, Dict[Tuple[int, str], str], str, str]] = []
+        with st.spinner(f"Cleaning {len(kept_sources)} source(s)..."):
+            for source in kept_sources:
+                sid = str(source["source_id"])
+                cleaned_df, cell_flags = apply_cleaning(
+                    source["df"],  # type: ignore[arg-type]
+                    source_mappings[sid],
+                    category_map,
+                    tshirt_map,
+                    age_as_on,
+                )
+                parts.append(
+                    (
+                        cleaned_df,
+                        cell_flags,
+                        str(source["file_name"]),
+                        str(source.get("sheet_name") or ""),
+                    )
+                )
+            cleaned_df, cell_flags = merge_cleaned_frames(parts)
+
         error_counts = count_errors_by_type(cell_flags)
         if error_counts:
             summary_parts = [
@@ -1852,9 +2269,15 @@ if src_df is not None:
                 for error_type, count in sorted(error_counts.items())
                 if error_type in ERROR_LEGEND
             ]
-            st.success(f"Cleaning completed. Flagged cells -> {' | '.join(summary_parts)}")
+            st.success(
+                f"Cleaning completed for {len(kept_sources)} source(s), "
+                f"{len(cleaned_df)} total rows. Flagged cells -> {' | '.join(summary_parts)}"
+            )
         else:
-            st.success("Cleaning completed. No flagged errors found.")
+            st.success(
+                f"Cleaning completed for {len(kept_sources)} source(s), "
+                f"{len(cleaned_df)} total rows. No flagged errors found."
+            )
 
         render_error_legend()
         preview_df = cleaned_df.head(20)
@@ -1872,5 +2295,7 @@ if src_df is not None:
         )
     save_persisted_state()
 else:
-    st.info("Upload a file to start. Loaded progress stays until you click 'Remove Loaded File'.")
-
+    st.info(
+        "Upload one or more files to start. Multi-sheet Excel files show Keep/Ignore per sheet. "
+        "Loaded progress stays until you click 'Remove Loaded Files'."
+    )
