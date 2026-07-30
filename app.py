@@ -493,21 +493,6 @@ ESSENTIAL_MAPPING_FIELDS = [
     "tshirt_size",
 ]
 
-RUNNER_COUNT_HINTS = {
-    "name",
-    "first name",
-    "last name",
-    "mobile",
-    "mobile no",
-    "phone",
-    "dob",
-    "birth date",
-    "birthdate",
-    "bib",
-    "registration",
-    "registration number",
-}
-
 ALIASES = {
     "full_name": ["attendee name", "runner name", "full name", "participant name", "name"],
     "first_name": ["first name", "first_name", "firstname", "fname"],
@@ -1283,6 +1268,27 @@ def map_key(source_id: str, field: str) -> str:
     return f"map::{source_id}::{field}"
 
 
+def make_source_entry(
+    file_id: str,
+    filename: str,
+    sheet_name: str,
+    df: pd.DataFrame,
+    default_keep: bool,
+) -> Dict[str, object]:
+    return {
+        "source_id": make_source_id(file_id, sheet_name or None),
+        "file_id": file_id,
+        "file_name": filename,
+        "sheet_name": sheet_name,
+        "default_keep": default_keep,
+        "rows": len(df),
+        # Fast keep/ignore signal: full row count for runner sheets, 0 for summary-like.
+        "runner_count": 0 if not default_keep else len(df),
+        "columns": list(df.columns),
+        "df": df,
+    }
+
+
 @st.cache_data(show_spinner=False)
 def discover_file_sources(file_bytes: bytes, filename: str) -> List[Dict[str, object]]:
     """Return one source entry per CSV file or Excel sheet."""
@@ -1293,35 +1299,14 @@ def discover_file_sources(file_bytes: bytes, filename: str) -> List[Dict[str, ob
     if lower.endswith(".csv"):
         uploaded_file = io.BytesIO(file_bytes)
         df = pd.read_csv(uploaded_file, dtype=str, keep_default_na=False).fillna("")
-        sources.append(
-            {
-                "source_id": make_source_id(file_id, None),
-                "file_id": file_id,
-                "file_name": filename,
-                "sheet_name": "",
-                "default_keep": True,
-                "rows": len(df),
-                "columns": list(df.columns),
-                "df": df,
-            }
-        )
+        sources.append(make_source_entry(file_id, filename, "", df, True))
         return sources
 
     if lower.endswith(".xlsx"):
         sheets = read_xlsx_all_sheets(file_bytes)
         for sheet_name, df in sheets.items():
-            sources.append(
-                {
-                    "source_id": make_source_id(file_id, sheet_name),
-                    "file_id": file_id,
-                    "file_name": filename,
-                    "sheet_name": sheet_name,
-                    "default_keep": not looks_like_summary_sheet(sheet_name, df),
-                    "rows": len(df),
-                    "columns": list(df.columns),
-                    "df": df,
-                }
-            )
+            keep = not looks_like_summary_sheet(sheet_name, df)
+            sources.append(make_source_entry(file_id, filename, sheet_name, df, keep))
         return sources
 
     if lower.endswith(".xls"):
@@ -1330,18 +1315,8 @@ def discover_file_sources(file_bytes: bytes, filename: str) -> List[Dict[str, ob
             excel = pd.ExcelFile(uploaded_file)
             for sheet_name in excel.sheet_names:
                 df = pd.read_excel(excel, sheet_name=sheet_name, dtype=str).fillna("")
-                sources.append(
-                    {
-                        "source_id": make_source_id(file_id, sheet_name),
-                        "file_id": file_id,
-                        "file_name": filename,
-                        "sheet_name": sheet_name,
-                        "default_keep": not looks_like_summary_sheet(sheet_name, df),
-                        "rows": len(df),
-                        "columns": list(df.columns),
-                        "df": df,
-                    }
-                )
+                keep = not looks_like_summary_sheet(sheet_name, df)
+                sources.append(make_source_entry(file_id, filename, sheet_name, df, keep))
             return sources
         except Exception:
             uploaded_file.seek(0)
@@ -1351,21 +1326,27 @@ def discover_file_sources(file_bytes: bytes, filename: str) -> List[Dict[str, ob
                 df.columns = df.iloc[0]
                 df = df.iloc[1:].reset_index(drop=True)
             df = df.astype(str).fillna("")
-            sources.append(
-                {
-                    "source_id": make_source_id(file_id, None),
-                    "file_id": file_id,
-                    "file_name": filename,
-                    "sheet_name": "",
-                    "default_keep": True,
-                    "rows": len(df),
-                    "columns": list(df.columns),
-                    "df": df,
-                }
-            )
+            sources.append(make_source_entry(file_id, filename, "", df, True))
             return sources
 
     raise ValueError("Unsupported file format")
+
+
+@st.cache_data(show_spinner=False)
+def cached_column_value_counts(
+    file_id: str, sheet_name: str, col_name: str, file_bytes: bytes, filename: str
+) -> Tuple[Tuple[str, int], ...]:
+    """Cached unique value counts for one column (avoids re-scanning 20k+ rows)."""
+    for source in discover_file_sources(file_bytes, filename):
+        if str(source.get("sheet_name") or "") != (sheet_name or ""):
+            continue
+        df = source["df"]  # type: ignore[assignment]
+        if col_name not in df.columns:
+            return tuple()
+        series = df[col_name].fillna("").astype(str).str.strip().replace("", ".")
+        counts = series.value_counts()
+        return tuple((str(k), int(v)) for k, v in counts.items())
+    return tuple()
 
 
 @st.cache_data(show_spinner=False)
@@ -1797,10 +1778,8 @@ def save_persisted_state():
         "loaded_files",
         "loaded_batch_id",
         "source_keep",
-        "category_edit_df",
-        "category_edit_fp",
-        "tshirt_edit_df",
-        "tshirt_edit_fp",
+        "category_value_map",
+        "tshirt_value_map",
         "age_as_on_date",
         "upload_widget_nonce",
         "active_map_source_label",
@@ -1819,6 +1798,8 @@ def clear_loaded_file_state():
         "loaded_files",
         "loaded_batch_id",
         "source_keep",
+        "category_value_map",
+        "tshirt_value_map",
         "category_edit_df",
         "category_edit_fp",
         "tshirt_edit_df",
@@ -1840,11 +1821,9 @@ def clear_loaded_file_state():
             or key.startswith("keep_")
             or key.startswith("bulk_")
             or key.startswith("tshirt_bulk_")
-            or key in {
-                "source_keep_editor",
-                "category_value_editor",
-                "tshirt_value_editor",
-            }
+            or key.startswith("category_value_editor")
+            or key.startswith("tshirt_value_editor")
+            or key in {"source_keep_editor"}
         ):
             st.session_state.pop(key, None)
     # Legacy single-file keys
@@ -1861,85 +1840,89 @@ def source_label(source: Dict[str, object]) -> str:
     return file_name
 
 
-def estimate_runner_count(df: pd.DataFrame) -> int:
-    """Estimate runner rows to help Keep/Ignore decisions before mapping."""
-    if df.empty:
-        return 0
-    candidate_cols = []
-    for col in df.columns:
-        norm = normalize_header(col)
-        if any(hint == norm or hint in norm for hint in RUNNER_COUNT_HINTS):
-            candidate_cols.append(col)
-    if not candidate_cols:
-        return len(df)
-    non_blank = pd.Series(False, index=df.index)
-    for col in candidate_cols:
-        values = (
-            df[col]
-            .fillna("")
-            .astype(str)
-            .map(strip_formula)
-            .map(clean_spaces)
-        )
-        non_blank = non_blank | values.ne("")
-    return int(non_blank.sum())
-
-
 def mapped_field_count(mapping: Dict[str, Optional[str]]) -> int:
     return sum(1 for value in mapping.values() if value)
 
 
-def collect_raw_value_breakdown(
+def build_value_breakdown(
     sources: List[Dict[str, object]],
     source_mappings: Dict[str, Dict[str, Optional[str]]],
     field_key: str,
+    loaded_files: Dict[str, Dict[str, object]],
 ) -> pd.DataFrame:
-    """Build Source | Raw Value | Rows for category/tshirt across ALL kept sources."""
+    """Unique values per source for category/tshirt (cached column scans)."""
     rows: List[Dict[str, object]] = []
     for source in sources:
         sid = str(source["source_id"])
         col_name = source_mappings.get(sid, {}).get(field_key)
         if not col_name:
             continue
-        df = source["df"]  # type: ignore[assignment]
-        if col_name not in df.columns:
+        file_id = str(source["file_id"])
+        meta = loaded_files.get(file_id)
+        if not meta:
             continue
-        series = (
-            df[col_name]
-            .fillna("")
-            .astype(str)
-            .map(strip_formula)
-            .map(clean_spaces)
-            .replace("", ".")
+        counts = cached_column_value_counts(
+            file_id,
+            str(source.get("sheet_name") or ""),
+            col_name,
+            meta["file_bytes"],  # type: ignore[arg-type]
+            str(meta["file_name"]),
         )
-        counts = series.value_counts()
         label = source_label(source)
-        for raw_value, count in counts.items():
-            rows.append(
-                {
-                    "Source": label,
-                    "Raw Value": str(raw_value),
-                    "Rows": int(count),
-                }
-            )
+        for raw_value, count in counts:
+            rows.append({"Source": label, "Raw Value": raw_value, "Rows": count})
     if not rows:
         return pd.DataFrame(columns=["Source", "Raw Value", "Rows", "Mapped Value"])
-    out = pd.DataFrame(rows).sort_values(by=["Source", "Raw Value"]).reset_index(drop=True)
+    out = pd.DataFrame(rows).sort_values(["Source", "Raw Value"]).reset_index(drop=True)
     out["Mapped Value"] = out["Raw Value"]
     return out
 
 
-def sync_mapped_dict_from_editor(edit_df: pd.DataFrame) -> Dict[str, str]:
-    """Collapse Source|Raw|Mapped editor rows into raw->mapped dict (all sources)."""
-    mapping: Dict[str, str] = {}
-    if edit_df is None or edit_df.empty:
-        return mapping
-    for _, row in edit_df.iterrows():
-        raw = clean_spaces(str(row.get("Raw Value", "")))
-        mapped = clean_spaces(str(row.get("Mapped Value", ""))) or "."
-        if raw:
-            mapping[raw] = mapped
-    return mapping
+def render_value_map_editor(
+    title: str,
+    breakdown: pd.DataFrame,
+    state_map_key: str,
+    editor_key: str,
+) -> Dict[str, str]:
+    """Safe lightweight mapper: store only raw->mapped dict (no df session writes)."""
+    if state_map_key not in st.session_state:
+        st.session_state[state_map_key] = {}
+
+    saved_map: Dict[str, str] = dict(st.session_state[state_map_key])
+    display = breakdown.copy()
+    display["Mapped Value"] = [
+        saved_map.get(str(raw), str(raw)) for raw in display["Raw Value"].tolist()
+    ]
+    fp = hashlib.md5(
+        "|".join(f"{a}:{b}:{c}" for a, b, c in zip(
+            display["Source"].astype(str),
+            display["Raw Value"].astype(str),
+            display["Rows"].astype(str),
+        )).encode("utf-8")
+    ).hexdigest()[:10]
+
+    st.markdown(f"**{title}**")
+    st.caption("Sources: " + " | ".join(sorted(display["Source"].unique().tolist())))
+    edited = st.data_editor(
+        display,
+        hide_index=True,
+        use_container_width=True,
+        disabled=["Source", "Raw Value", "Rows"],
+        column_config={
+            "Mapped Value": st.column_config.TextColumn("Mapped Value"),
+            "Rows": st.column_config.NumberColumn("Rows"),
+        },
+        key=f"{editor_key}_{fp}",
+    )
+
+    new_map: Dict[str, str] = {}
+    for raw, mapped in zip(edited["Raw Value"].tolist(), edited["Mapped Value"].tolist()):
+        raw_s = clean_spaces(str(raw))
+        mapped_s = clean_spaces(str(mapped)) or "."
+        if raw_s:
+            new_map[raw_s] = mapped_s
+    st.session_state[state_map_key] = new_map
+    return new_map
 
 
 restore_persisted_state()
@@ -1977,6 +1960,8 @@ if uploaded_files:
         # Reset maps/keep flags for the new batch, but do not remount the uploader
         # (that would wipe the just-selected files).
         for key in [
+            "category_value_map",
+            "tshirt_value_map",
             "category_edit_df",
             "category_edit_fp",
             "tshirt_edit_df",
@@ -1997,11 +1982,9 @@ if uploaded_files:
                 or key.startswith("keep_")
                 or key.startswith("bulk_")
                 or key.startswith("tshirt_bulk_")
-                or key in {
-                    "source_keep_editor",
-                    "category_value_editor",
-                    "tshirt_value_editor",
-                }
+                or key.startswith("category_value_editor")
+                or key.startswith("tshirt_value_editor")
+                or key in {"source_keep_editor"}
             ):
                 st.session_state.pop(key, None)
         st.session_state["loaded_files"] = {
@@ -2034,14 +2017,11 @@ if all_sources:
 
     top_left, top_right = st.columns([3, 1])
     with top_left:
-        kept_count = sum(
-            1 for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)
-        )
-        total_runners = sum(
-            estimate_runner_count(s["df"])  # type: ignore[arg-type]
-            for s in all_sources
-            if st.session_state["source_keep"].get(str(s["source_id"]), False)
-        )
+        kept_sources_preview = [
+            s for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)
+        ]
+        kept_count = len(kept_sources_preview)
+        total_runners = sum(int(s.get("runner_count", s["rows"])) for s in kept_sources_preview)
         st.success(
             f"Loaded {len(st.session_state['loaded_files'])} file(s) → "
             f"{len(all_sources)} sheet(s) | Keeping {kept_count} | "
@@ -2053,56 +2033,46 @@ if all_sources:
             st.rerun()
 
     st.subheader("1) Analyse & Keep Files / Sheets")
-    st.caption("Tick Keep only for runner sheets. Summary sheets (like Count) should stay off.")
+    st.caption("Keep runner sheets. Ignore summary sheets like Count.")
 
-    analysis_rows = []
+    overview = pd.DataFrame(
+        [
+            {
+                "File": str(s["file_name"]),
+                "Sheet": str(s.get("sheet_name") or "(whole file)"),
+                "Runners": int(s.get("runner_count", s["rows"])),
+                "Rows": int(s["rows"]),
+                "Cols": len(s["columns"]),  # type: ignore[arg-type]
+                "Suggestion": "IGNORE" if not s["default_keep"] else "KEEP",
+            }
+            for s in all_sources
+        ]
+    ).sort_values(["Runners", "Rows"], ascending=[False, False])
+    st.dataframe(overview, hide_index=True, use_container_width=True)
+
+    q1, q2 = st.columns(2)
+    with q1:
+        if st.button("Use Suggestions", use_container_width=True):
+            for s in all_sources:
+                st.session_state["source_keep"][str(s["source_id"])] = bool(s["default_keep"])
+            st.rerun()
+    with q2:
+        if st.button("Keep All", use_container_width=True):
+            for s in all_sources:
+                st.session_state["source_keep"][str(s["source_id"])] = True
+            st.rerun()
+
     for source in all_sources:
         sid = str(source["source_id"])
-        runner_rows = estimate_runner_count(source["df"])  # type: ignore[arg-type]
-        analysis_rows.append(
-            {
-                "source_id": sid,
-                "Keep": bool(st.session_state["source_keep"].get(sid, source["default_keep"])),
-                "File": str(source["file_name"]),
-                "Sheet": str(source.get("sheet_name") or "(whole file)"),
-                "Runners": runner_rows,
-                "Rows": int(source["rows"]),
-                "Cols": len(source["columns"]),  # type: ignore[arg-type]
-                "Suggestion": "IGNORE" if not source["default_keep"] else "KEEP",
-            }
+        label = source_label(source)
+        runners = int(source.get("runner_count", source["rows"]))
+        tip = "summary" if not source["default_keep"] else "runners"
+        keep = st.checkbox(
+            f"{label} — {runners} runners ({tip})",
+            value=bool(st.session_state["source_keep"].get(sid, source["default_keep"])),
+            key=f"keep_{sid}",
         )
-    analysis_df = pd.DataFrame(analysis_rows).sort_values(
-        by=["Runners", "Rows"], ascending=[False, False]
-    ).reset_index(drop=True)
-
-    quick1, quick2 = st.columns(2)
-    with quick1:
-        if st.button("Use Suggestions", use_container_width=True):
-            for source in all_sources:
-                sid = str(source["source_id"])
-                st.session_state["source_keep"][sid] = bool(source["default_keep"])
-            st.rerun()
-    with quick2:
-        if st.button("Keep All", use_container_width=True):
-            for source in all_sources:
-                sid = str(source["source_id"])
-                st.session_state["source_keep"][sid] = True
-            st.rerun()
-
-    edited_keep = st.data_editor(
-        analysis_df.drop(columns=["source_id"]),
-        hide_index=True,
-        use_container_width=True,
-        disabled=["File", "Sheet", "Runners", "Rows", "Cols", "Suggestion"],
-        column_config={
-            "Keep": st.column_config.CheckboxColumn("Keep", required=True),
-            "Runners": st.column_config.NumberColumn("Runners", help="Estimated runner rows"),
-        },
-        key="source_keep_editor",
-    )
-    for i, row in edited_keep.iterrows():
-        sid = analysis_df.at[i, "source_id"]
-        st.session_state["source_keep"][sid] = bool(row["Keep"])
+        st.session_state["source_keep"][sid] = keep
 
     kept_sources = [
         s for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)
@@ -2113,14 +2083,8 @@ if all_sources:
         st.stop()
 
     st.subheader("2) Map Columns (one source at a time)")
-    st.caption("Pick a file/sheet, check auto-map, fix only what looks wrong.")
-
     source_labels = {source_label(s): s for s in kept_sources}
-    selected_label = st.selectbox(
-        "Working on",
-        options=list(source_labels.keys()),
-        key="active_map_source_label",
-    )
+    selected_label = st.selectbox("Working on", list(source_labels.keys()), key="active_map_source_label")
     active_source = source_labels[selected_label]
     active_sid = str(active_source["source_id"])
     active_df = active_source["df"]  # type: ignore[assignment]
@@ -2128,45 +2092,41 @@ if all_sources:
     active_guess = guess_mapping(active_cols)
     active_options = ["<None>"] + active_cols
 
-    map_info1, map_info2, map_info3 = st.columns(3)
-    map_info1.metric("Runners", estimate_runner_count(active_df))
-    map_info2.metric("Rows", int(active_source["rows"]))
-    map_info3.metric("Columns", len(active_cols))
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Runners", int(active_source.get("runner_count", active_source["rows"])))
+    m2.metric("Rows", int(active_source["rows"]))
+    m3.metric("Columns", len(active_cols))
 
-    with st.expander("Preview this source (first 8 rows)", expanded=False):
+    with st.expander("Preview (first 8 rows)", expanded=False):
         st.dataframe(active_df.head(8), use_container_width=True)
 
-    # Build mappings for ALL kept sources every run (so value mapping gets every file).
+    # Resolve mappings for all kept sources (defaults + saved picks).
     source_mappings: Dict[str, Dict[str, Optional[str]]] = {}
     for source in kept_sources:
         sid = str(source["source_id"])
         cols = list(source["columns"])  # type: ignore[arg-type]
         guessed = guess_mapping(cols)
-        options = ["<None>"] + cols
+        options = set(cols) | {"<None>"}
         mapping: Dict[str, Optional[str]] = {}
         for field in CANONICAL_FIELDS:
             key = map_key(sid, field)
-            if key in st.session_state and st.session_state[key] in options:
-                picked = st.session_state[key]
-            else:
-                guessed_col = guessed.get(field)
-                picked = guessed_col if guessed_col in options else "<None>"
-                if key not in st.session_state:
-                    st.session_state[key] = picked
+            picked = st.session_state.get(key)
+            if picked not in options:
+                picked = guessed.get(field) if guessed.get(field) in options else "<None>"
             mapping[field] = None if picked == "<None>" else picked
         source_mappings[sid] = mapping
 
     st.markdown("**Essential columns**")
     essential_ui = st.columns(2)
     for idx, field in enumerate(ESSENTIAL_MAPPING_FIELDS):
-        col_ui = essential_ui[idx % 2]
         key = map_key(active_sid, field)
-        current = st.session_state.get(key, active_guess.get(field) or "<None>")
-        default_index = active_options.index(current) if current in active_options else 0
-        picked = col_ui.selectbox(
+        current = source_mappings[active_sid].get(field) or active_guess.get(field) or "<None>"
+        if current not in active_options:
+            current = "<None>"
+        picked = essential_ui[idx % 2].selectbox(
             FIELD_LABELS[field],
             options=active_options,
-            index=default_index,
+            index=active_options.index(current),
             key=key,
         )
         source_mappings[active_sid][field] = None if picked == "<None>" else picked
@@ -2175,38 +2135,33 @@ if all_sources:
         advanced_fields = [f for f in CANONICAL_FIELDS if f not in ESSENTIAL_MAPPING_FIELDS]
         adv_ui = st.columns(2)
         for idx, field in enumerate(advanced_fields):
-            col_ui = adv_ui[idx % 2]
             key = map_key(active_sid, field)
-            current = st.session_state.get(key, active_guess.get(field) or "<None>")
-            default_index = active_options.index(current) if current in active_options else 0
-            picked = col_ui.selectbox(
+            current = source_mappings[active_sid].get(field) or active_guess.get(field) or "<None>"
+            if current not in active_options:
+                current = "<None>"
+            picked = adv_ui[idx % 2].selectbox(
                 FIELD_LABELS[field],
                 options=active_options,
-                index=default_index,
+                index=active_options.index(current),
                 key=key,
             )
             source_mappings[active_sid][field] = None if picked == "<None>" else picked
 
     for field in CANONICAL_FIELDS:
-        key = map_key(active_sid, field)
-        picked = st.session_state.get(key, "<None>")
+        picked = st.session_state.get(map_key(active_sid, field), "<None>")
         source_mappings[active_sid][field] = None if picked == "<None>" else picked
 
-    status_rows = []
-    for source in kept_sources:
-        sid = str(source["source_id"])
-        mapping = source_mappings[sid]
-        status_rows.append(
-            {
-                "Source": source_label(source),
-                "Mapped": mapped_field_count(mapping),
-                "Category col": mapping.get("category") or "—",
-                "T-Shirt col": mapping.get("tshirt_size") or "—",
-                "Phone col": mapping.get("phone") or "—",
-                "DOB col": mapping.get("dob") or "—",
-            }
-        )
-    st.markdown("**Mapping status (all kept sources)**")
+    status_rows = [
+        {
+            "Source": source_label(s),
+            "Category": source_mappings[str(s["source_id"])].get("category") or "—",
+            "T-Shirt": source_mappings[str(s["source_id"])].get("tshirt_size") or "—",
+            "Phone": source_mappings[str(s["source_id"])].get("phone") or "—",
+            "DOB": source_mappings[str(s["source_id"])].get("dob") or "—",
+        }
+        for s in kept_sources
+    ]
+    st.caption("Column map status")
     st.dataframe(pd.DataFrame(status_rows), hide_index=True, use_container_width=True)
 
     age_as_on = st.date_input(
@@ -2216,102 +2171,50 @@ if all_sources:
         key="age_as_on_date",
     )
 
+    st.subheader("3) Map Category & T-Shirt Values")
+    st.caption("Values from every kept source. Edit Mapped Value only.")
+
     category_map: Dict[str, str] = {}
     tshirt_map: Dict[str, str] = {}
+    loaded_files = st.session_state.get("loaded_files", {})
 
-    st.subheader("3) Map Category & T-Shirt Values (all kept sources)")
-    st.caption(
-        "Every kept file/sheet is listed with its own raw values. "
-        "Edit Mapped Value. Same raw text across files shares one mapping."
-    )
-
-    cat_breakdown = collect_raw_value_breakdown(kept_sources, source_mappings, "category")
-    if not cat_breakdown.empty:
-        cat_fingerprint = tuple(
-            zip(cat_breakdown["Source"], cat_breakdown["Raw Value"], cat_breakdown["Rows"])
+    try:
+        cat_breakdown = build_value_breakdown(
+            kept_sources, source_mappings, "category", loaded_files
         )
-        if (
-            "category_edit_df" not in st.session_state
-            or st.session_state.get("category_edit_fp") != cat_fingerprint
-        ):
-            prev = st.session_state.get("category_edit_df")
-            prev_map: Dict[str, str] = {}
-            if isinstance(prev, pd.DataFrame) and not prev.empty and "Raw Value" in prev.columns:
-                prev_map = sync_mapped_dict_from_editor(prev)
-            fresh = cat_breakdown.copy()
-            fresh["Mapped Value"] = fresh["Raw Value"].map(lambda x: prev_map.get(str(x), str(x)))
-            st.session_state["category_edit_df"] = fresh
-            st.session_state["category_edit_fp"] = cat_fingerprint
-
-        st.markdown("**Category values by source**")
-        sources_in_cat = sorted(cat_breakdown["Source"].unique().tolist())
-        st.caption("Showing values from: " + " | ".join(sources_in_cat))
-        edited_cat = st.data_editor(
-            st.session_state["category_edit_df"],
-            hide_index=True,
-            use_container_width=True,
-            disabled=["Source", "Raw Value", "Rows"],
-            column_config={
-                "Mapped Value": st.column_config.TextColumn("Mapped Value", required=True),
-                "Rows": st.column_config.NumberColumn("Rows"),
-            },
-            key="category_value_editor",
-        )
-        st.session_state["category_edit_df"] = edited_cat
-        category_map = sync_mapped_dict_from_editor(edited_cat)
-        if st.button("Reset Category Mappings", key="reset_category_maps"):
-            reset_df = cat_breakdown.copy()
-            reset_df["Mapped Value"] = reset_df["Raw Value"]
-            st.session_state["category_edit_df"] = reset_df
-            st.rerun()
-    else:
-        st.info("No category column mapped yet on any kept source. Map Category in step 2.")
-
-    tshirt_breakdown = collect_raw_value_breakdown(kept_sources, source_mappings, "tshirt_size")
-    if not tshirt_breakdown.empty:
-        tshirt_fingerprint = tuple(
-            zip(
-                tshirt_breakdown["Source"],
-                tshirt_breakdown["Raw Value"],
-                tshirt_breakdown["Rows"],
+        if cat_breakdown.empty:
+            st.info("Map a Category column in step 2 to edit category values.")
+        else:
+            category_map = render_value_map_editor(
+                "Category values by source",
+                cat_breakdown,
+                "category_value_map",
+                "category_value_editor",
             )
-        )
-        if (
-            "tshirt_edit_df" not in st.session_state
-            or st.session_state.get("tshirt_edit_fp") != tshirt_fingerprint
-        ):
-            prev = st.session_state.get("tshirt_edit_df")
-            prev_map = {}
-            if isinstance(prev, pd.DataFrame) and not prev.empty and "Raw Value" in prev.columns:
-                prev_map = sync_mapped_dict_from_editor(prev)
-            fresh = tshirt_breakdown.copy()
-            fresh["Mapped Value"] = fresh["Raw Value"].map(lambda x: prev_map.get(str(x), str(x)))
-            st.session_state["tshirt_edit_df"] = fresh
-            st.session_state["tshirt_edit_fp"] = tshirt_fingerprint
+            if st.button("Reset Category Mappings", key="reset_category_maps"):
+                st.session_state["category_value_map"] = {}
+                st.rerun()
+    except Exception as exc:
+        st.error(f"Category mapping failed: {exc}")
 
-        st.markdown("**T-Shirt values by source**")
-        sources_in_tshirt = sorted(tshirt_breakdown["Source"].unique().tolist())
-        st.caption("Showing values from: " + " | ".join(sources_in_tshirt))
-        edited_tshirt = st.data_editor(
-            st.session_state["tshirt_edit_df"],
-            hide_index=True,
-            use_container_width=True,
-            disabled=["Source", "Raw Value", "Rows"],
-            column_config={
-                "Mapped Value": st.column_config.TextColumn("Mapped Value", required=True),
-                "Rows": st.column_config.NumberColumn("Rows"),
-            },
-            key="tshirt_value_editor",
+    try:
+        tshirt_breakdown = build_value_breakdown(
+            kept_sources, source_mappings, "tshirt_size", loaded_files
         )
-        st.session_state["tshirt_edit_df"] = edited_tshirt
-        tshirt_map = sync_mapped_dict_from_editor(edited_tshirt)
-        if st.button("Reset T-Shirt Mappings", key="reset_tshirt_maps"):
-            reset_df = tshirt_breakdown.copy()
-            reset_df["Mapped Value"] = reset_df["Raw Value"]
-            st.session_state["tshirt_edit_df"] = reset_df
-            st.rerun()
-    else:
-        st.info("No T-shirt column mapped yet on any kept source. Map T-Shirt Size in step 2.")
+        if tshirt_breakdown.empty:
+            st.info("Map a T-Shirt column in step 2 to edit T-shirt values.")
+        else:
+            tshirt_map = render_value_map_editor(
+                "T-Shirt values by source",
+                tshirt_breakdown,
+                "tshirt_value_map",
+                "tshirt_value_editor",
+            )
+            if st.button("Reset T-Shirt Mappings", key="reset_tshirt_maps"):
+                st.session_state["tshirt_value_map"] = {}
+                st.rerun()
+    except Exception as exc:
+        st.error(f"T-Shirt mapping failed: {exc}")
 
     st.subheader("4) Clean & Download")
     render_error_legend()
