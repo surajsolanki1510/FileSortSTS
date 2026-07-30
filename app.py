@@ -1333,23 +1333,6 @@ def discover_file_sources(file_bytes: bytes, filename: str) -> List[Dict[str, ob
 
 
 @st.cache_data(show_spinner=False)
-def cached_column_value_counts(
-    file_id: str, sheet_name: str, col_name: str, file_bytes: bytes, filename: str
-) -> Tuple[Tuple[str, int], ...]:
-    """Cached unique value counts for one column (avoids re-scanning 20k+ rows)."""
-    for source in discover_file_sources(file_bytes, filename):
-        if str(source.get("sheet_name") or "") != (sheet_name or ""):
-            continue
-        df = source["df"]  # type: ignore[assignment]
-        if col_name not in df.columns:
-            return tuple()
-        series = df[col_name].fillna("").astype(str).str.strip().replace("", ".")
-        counts = series.value_counts()
-        return tuple((str(k), int(v)) for k, v in counts.items())
-    return tuple()
-
-
-@st.cache_data(show_spinner=False)
 def read_uploaded_file_cached(file_bytes: bytes, filename: str) -> pd.DataFrame:
     sources = discover_file_sources(file_bytes, filename)
     if not sources:
@@ -1774,8 +1757,8 @@ def restore_persisted_state():
 def save_persisted_state():
     store = get_persisted_state_store()
     sid = get_session_persist_id()
+    # Never persist file bytes — that OOMs Streamlit Cloud on large Excel files.
     keys_to_persist = [
-        "loaded_files",
         "loaded_batch_id",
         "source_keep",
         "category_value_map",
@@ -1844,38 +1827,33 @@ def mapped_field_count(mapping: Dict[str, Optional[str]]) -> int:
     return sum(1 for value in mapping.values() if value)
 
 
+def column_value_counts(df: pd.DataFrame, col_name: str) -> List[Tuple[str, int]]:
+    if col_name not in df.columns:
+        return []
+    series = df[col_name].fillna("").astype(str).str.strip().replace("", ".")
+    counts = series.value_counts()
+    return [(str(k), int(v)) for k, v in counts.items()]
+
+
 def build_value_breakdown(
     sources: List[Dict[str, object]],
     source_mappings: Dict[str, Dict[str, Optional[str]]],
     field_key: str,
-    loaded_files: Dict[str, Dict[str, object]],
 ) -> pd.DataFrame:
-    """Unique values per source for category/tshirt (cached column scans)."""
+    """Unique values per source for category/tshirt from in-memory dataframes."""
     rows: List[Dict[str, object]] = []
     for source in sources:
         sid = str(source["source_id"])
         col_name = source_mappings.get(sid, {}).get(field_key)
         if not col_name:
             continue
-        file_id = str(source["file_id"])
-        meta = loaded_files.get(file_id)
-        if not meta:
-            continue
-        counts = cached_column_value_counts(
-            file_id,
-            str(source.get("sheet_name") or ""),
-            col_name,
-            meta["file_bytes"],  # type: ignore[arg-type]
-            str(meta["file_name"]),
-        )
+        df = source["df"]  # type: ignore[assignment]
         label = source_label(source)
-        for raw_value, count in counts:
+        for raw_value, count in column_value_counts(df, col_name):
             rows.append({"Source": label, "Raw Value": raw_value, "Rows": count})
     if not rows:
-        return pd.DataFrame(columns=["Source", "Raw Value", "Rows", "Mapped Value"])
-    out = pd.DataFrame(rows).sort_values(["Source", "Raw Value"]).reset_index(drop=True)
-    out["Mapped Value"] = out["Raw Value"]
-    return out
+        return pd.DataFrame(columns=["Source", "Raw Value", "Rows"])
+    return pd.DataFrame(rows).sort_values(["Source", "Raw Value"]).reset_index(drop=True)
 
 
 def render_value_map_editor(
@@ -1884,43 +1862,33 @@ def render_value_map_editor(
     state_map_key: str,
     editor_key: str,
 ) -> Dict[str, str]:
-    """Safe lightweight mapper: store only raw->mapped dict (no df session writes)."""
+    """Simple text inputs — avoids Streamlit data_editor crashes on cloud."""
     if state_map_key not in st.session_state:
         st.session_state[state_map_key] = {}
 
     saved_map: Dict[str, str] = dict(st.session_state[state_map_key])
-    display = breakdown.copy()
-    display["Mapped Value"] = [
-        saved_map.get(str(raw), str(raw)) for raw in display["Raw Value"].tolist()
-    ]
-    fp = hashlib.md5(
-        "|".join(f"{a}:{b}:{c}" for a, b, c in zip(
-            display["Source"].astype(str),
-            display["Raw Value"].astype(str),
-            display["Rows"].astype(str),
-        )).encode("utf-8")
-    ).hexdigest()[:10]
-
     st.markdown(f"**{title}**")
-    st.caption("Sources: " + " | ".join(sorted(display["Source"].unique().tolist())))
-    edited = st.data_editor(
-        display,
-        hide_index=True,
-        use_container_width=True,
-        disabled=["Source", "Raw Value", "Rows"],
-        column_config={
-            "Mapped Value": st.column_config.TextColumn("Mapped Value"),
-            "Rows": st.column_config.NumberColumn("Rows"),
-        },
-        key=f"{editor_key}_{fp}",
-    )
+    if breakdown.empty:
+        return saved_map
 
+    st.caption("Sources: " + " | ".join(sorted(breakdown["Source"].astype(str).unique().tolist())))
     new_map: Dict[str, str] = {}
-    for raw, mapped in zip(edited["Raw Value"].tolist(), edited["Mapped Value"].tolist()):
-        raw_s = clean_spaces(str(raw))
-        mapped_s = clean_spaces(str(mapped)) or "."
-        if raw_s:
-            new_map[raw_s] = mapped_s
+    # Cap widgets for safety on weird files with huge unique sets.
+    max_rows = 80
+    view = breakdown.head(max_rows)
+    for idx, row in view.iterrows():
+        raw = str(row["Raw Value"])
+        source = str(row["Source"])
+        rows_n = int(row["Rows"])
+        widget_key = f"{editor_key}::{source}::{raw}"
+        mapped = st.text_input(
+            f"{source} | {raw} ({rows_n} rows)",
+            value=saved_map.get(raw, raw),
+            key=widget_key,
+        )
+        new_map[raw] = clean_spaces(mapped) or "."
+    if len(breakdown) > max_rows:
+        st.warning(f"Showing first {max_rows} values only ({len(breakdown)} total).")
     st.session_state[state_map_key] = new_map
     return new_map
 
@@ -2176,12 +2144,9 @@ if all_sources:
 
     category_map: Dict[str, str] = {}
     tshirt_map: Dict[str, str] = {}
-    loaded_files = st.session_state.get("loaded_files", {})
 
     try:
-        cat_breakdown = build_value_breakdown(
-            kept_sources, source_mappings, "category", loaded_files
-        )
+        cat_breakdown = build_value_breakdown(kept_sources, source_mappings, "category")
         if cat_breakdown.empty:
             st.info("Map a Category column in step 2 to edit category values.")
         else:
@@ -2193,14 +2158,15 @@ if all_sources:
             )
             if st.button("Reset Category Mappings", key="reset_category_maps"):
                 st.session_state["category_value_map"] = {}
+                for key in list(st.session_state.keys()):
+                    if isinstance(key, str) and key.startswith("category_value_editor::"):
+                        st.session_state.pop(key, None)
                 st.rerun()
     except Exception as exc:
         st.error(f"Category mapping failed: {exc}")
 
     try:
-        tshirt_breakdown = build_value_breakdown(
-            kept_sources, source_mappings, "tshirt_size", loaded_files
-        )
+        tshirt_breakdown = build_value_breakdown(kept_sources, source_mappings, "tshirt_size")
         if tshirt_breakdown.empty:
             st.info("Map a T-Shirt column in step 2 to edit T-shirt values.")
         else:
@@ -2212,6 +2178,9 @@ if all_sources:
             )
             if st.button("Reset T-Shirt Mappings", key="reset_tshirt_maps"):
                 st.session_state["tshirt_value_map"] = {}
+                for key in list(st.session_state.keys()):
+                    if isinstance(key, str) and key.startswith("tshirt_value_editor::"):
+                        st.session_state.pop(key, None)
                 st.rerun()
     except Exception as exc:
         st.error(f"T-Shirt mapping failed: {exc}")
