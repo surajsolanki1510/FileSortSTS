@@ -1755,10 +1755,10 @@ st.markdown(
         <h1 class="hero-title">FileSort Cleaner</h1>
         <div class="hero-sub">
             <span class="step">Upload</span><span class="arrow">&#10148;</span>
-            <span class="step">Keep Sheets</span><span class="arrow">&#10148;</span>
-            <span class="step">Map Each</span><span class="arrow">&#10148;</span>
+            <span class="step">Keep</span><span class="arrow">&#10148;</span>
+            <span class="step">Map</span><span class="arrow">&#10148;</span>
             <span class="step">Clean</span><span class="arrow">&#10148;</span>
-            <span class="step">Merge Download</span>
+            <span class="step">Download</span>
         </div>
         <div class="hero-rule"></div>
     </div>
@@ -1797,14 +1797,13 @@ def save_persisted_state():
         "loaded_files",
         "loaded_batch_id",
         "source_keep",
-        "category_map_df",
-        "category_map_source",
-        "category_groups",
-        "tshirt_map_df",
-        "tshirt_map_source",
-        "tshirt_groups",
+        "category_edit_df",
+        "category_edit_fp",
+        "tshirt_edit_df",
+        "tshirt_edit_fp",
         "age_as_on_date",
         "upload_widget_nonce",
+        "active_map_source_label",
     ]
     snapshot = {k: st.session_state[k] for k in keys_to_persist if k in st.session_state}
     for key in list(st.session_state.keys()):
@@ -1820,6 +1819,10 @@ def clear_loaded_file_state():
         "loaded_files",
         "loaded_batch_id",
         "source_keep",
+        "category_edit_df",
+        "category_edit_fp",
+        "tshirt_edit_df",
+        "tshirt_edit_fp",
         "category_map_df",
         "category_map_source",
         "category_groups",
@@ -1827,6 +1830,7 @@ def clear_loaded_file_state():
         "tshirt_map_source",
         "tshirt_groups",
         "age_as_on_date",
+        "active_map_source_label",
     ]:
         st.session_state.pop(key, None)
     for key in list(st.session_state.keys()):
@@ -1836,6 +1840,11 @@ def clear_loaded_file_state():
             or key.startswith("keep_")
             or key.startswith("bulk_")
             or key.startswith("tshirt_bulk_")
+            or key in {
+                "source_keep_editor",
+                "category_value_editor",
+                "tshirt_value_editor",
+            }
         ):
             st.session_state.pop(key, None)
     # Legacy single-file keys
@@ -1880,6 +1889,59 @@ def mapped_field_count(mapping: Dict[str, Optional[str]]) -> int:
     return sum(1 for value in mapping.values() if value)
 
 
+def collect_raw_value_breakdown(
+    sources: List[Dict[str, object]],
+    source_mappings: Dict[str, Dict[str, Optional[str]]],
+    field_key: str,
+) -> pd.DataFrame:
+    """Build Source | Raw Value | Rows for category/tshirt across ALL kept sources."""
+    rows: List[Dict[str, object]] = []
+    for source in sources:
+        sid = str(source["source_id"])
+        col_name = source_mappings.get(sid, {}).get(field_key)
+        if not col_name:
+            continue
+        df = source["df"]  # type: ignore[assignment]
+        if col_name not in df.columns:
+            continue
+        series = (
+            df[col_name]
+            .fillna("")
+            .astype(str)
+            .map(strip_formula)
+            .map(clean_spaces)
+            .replace("", ".")
+        )
+        counts = series.value_counts()
+        label = source_label(source)
+        for raw_value, count in counts.items():
+            rows.append(
+                {
+                    "Source": label,
+                    "Raw Value": str(raw_value),
+                    "Rows": int(count),
+                }
+            )
+    if not rows:
+        return pd.DataFrame(columns=["Source", "Raw Value", "Rows", "Mapped Value"])
+    out = pd.DataFrame(rows).sort_values(by=["Source", "Raw Value"]).reset_index(drop=True)
+    out["Mapped Value"] = out["Raw Value"]
+    return out
+
+
+def sync_mapped_dict_from_editor(edit_df: pd.DataFrame) -> Dict[str, str]:
+    """Collapse Source|Raw|Mapped editor rows into raw->mapped dict (all sources)."""
+    mapping: Dict[str, str] = {}
+    if edit_df is None or edit_df.empty:
+        return mapping
+    for _, row in edit_df.iterrows():
+        raw = clean_spaces(str(row.get("Raw Value", "")))
+        mapped = clean_spaces(str(row.get("Mapped Value", ""))) or "."
+        if raw:
+            mapping[raw] = mapped
+    return mapping
+
+
 restore_persisted_state()
 if "upload_widget_nonce" not in st.session_state:
     st.session_state["upload_widget_nonce"] = 0
@@ -1915,6 +1977,10 @@ if uploaded_files:
         # Reset maps/keep flags for the new batch, but do not remount the uploader
         # (that would wipe the just-selected files).
         for key in [
+            "category_edit_df",
+            "category_edit_fp",
+            "tshirt_edit_df",
+            "tshirt_edit_fp",
             "category_map_df",
             "category_map_source",
             "category_groups",
@@ -1922,6 +1988,7 @@ if uploaded_files:
             "tshirt_map_source",
             "tshirt_groups",
             "age_as_on_date",
+            "active_map_source_label",
         ]:
             st.session_state.pop(key, None)
         for key in list(st.session_state.keys()):
@@ -1930,6 +1997,11 @@ if uploaded_files:
                 or key.startswith("keep_")
                 or key.startswith("bulk_")
                 or key.startswith("tshirt_bulk_")
+                or key in {
+                    "source_keep_editor",
+                    "category_value_editor",
+                    "tshirt_value_editor",
+                }
             ):
                 st.session_state.pop(key, None)
         st.session_state["loaded_files"] = {
@@ -1965,160 +2037,177 @@ if all_sources:
         kept_count = sum(
             1 for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)
         )
+        total_runners = sum(
+            estimate_runner_count(s["df"])  # type: ignore[arg-type]
+            for s in all_sources
+            if st.session_state["source_keep"].get(str(s["source_id"]), False)
+        )
         st.success(
             f"Loaded {len(st.session_state['loaded_files'])} file(s) → "
-            f"{len(all_sources)} sheet/source(s). Keeping {kept_count}."
+            f"{len(all_sources)} sheet(s) | Keeping {kept_count} | "
+            f"Selected runners ≈ {total_runners}"
         )
     with top_right:
         if st.button("Remove Loaded Files", type="secondary", use_container_width=True):
             clear_loaded_file_state()
             st.rerun()
 
-    st.subheader("Step A: Choose What to Keep")
-    st.caption(
-        "Quickly keep runner sheets and ignore summary sheets. "
-        "Runner count helps you decide before mapping."
-    )
-    source_rows = []
+    st.subheader("1) Analyse & Keep Files / Sheets")
+    st.caption("Tick Keep only for runner sheets. Summary sheets (like Count) should stay off.")
+
+    analysis_rows = []
     for source in all_sources:
         sid = str(source["source_id"])
-        df = source["df"]  # type: ignore[assignment]
-        runner_rows = estimate_runner_count(df)
-        keep_now = bool(st.session_state["source_keep"].get(sid, source["default_keep"]))
-        suggestion = "Ignore (summary-like)" if not source["default_keep"] else "Keep"
-        source_rows.append(
+        runner_rows = estimate_runner_count(source["df"])  # type: ignore[arg-type]
+        analysis_rows.append(
             {
-                "Keep": keep_now,
+                "source_id": sid,
+                "Keep": bool(st.session_state["source_keep"].get(sid, source["default_keep"])),
                 "File": str(source["file_name"]),
                 "Sheet": str(source.get("sheet_name") or "(whole file)"),
-                "Runner Rows": runner_rows,
-                "Total Rows": int(source["rows"]),
-                "Columns": len(source["columns"]),  # type: ignore[arg-type]
-                "Suggested": suggestion,
+                "Runners": runner_rows,
+                "Rows": int(source["rows"]),
+                "Cols": len(source["columns"]),  # type: ignore[arg-type]
+                "Suggestion": "IGNORE" if not source["default_keep"] else "KEEP",
             }
         )
+    analysis_df = pd.DataFrame(analysis_rows).sort_values(
+        by=["Runners", "Rows"], ascending=[False, False]
+    ).reset_index(drop=True)
 
-    source_df = pd.DataFrame(source_rows).sort_values(
-        by=["Runner Rows", "Total Rows"], ascending=[False, False]
-    )
-    st.dataframe(source_df, hide_index=True, use_container_width=True)
-
-    action_col1, action_col2 = st.columns(2)
-    with action_col1:
-        if st.button("Keep All Suggested", use_container_width=True):
+    quick1, quick2 = st.columns(2)
+    with quick1:
+        if st.button("Use Suggestions", use_container_width=True):
             for source in all_sources:
                 sid = str(source["source_id"])
                 st.session_state["source_keep"][sid] = bool(source["default_keep"])
-                st.session_state[f"keep_{sid}"] = bool(source["default_keep"])
             st.rerun()
-    with action_col2:
-        if st.button("Keep All Sources", use_container_width=True):
+    with quick2:
+        if st.button("Keep All", use_container_width=True):
             for source in all_sources:
                 sid = str(source["source_id"])
                 st.session_state["source_keep"][sid] = True
-                st.session_state[f"keep_{sid}"] = True
             st.rerun()
 
-    st.markdown("**Select Sources**")
-    for source in all_sources:
-        sid = str(source["source_id"])
-        sheet = str(source.get("sheet_name") or "(whole file)")
-        runner_rows = estimate_runner_count(source["df"])  # type: ignore[arg-type]
-        default_note = "summary-like" if not source["default_keep"] else "runner-like"
-        keep = st.checkbox(
-            f"{source['file_name']} / {sheet} — runners: {runner_rows}, "
-            f"rows: {source['rows']}, cols: {len(source['columns'])} ({default_note})",
-            value=bool(st.session_state["source_keep"].get(sid, source["default_keep"])),
-            key=f"keep_{sid}",
-        )
-        st.session_state["source_keep"][sid] = keep
+    edited_keep = st.data_editor(
+        analysis_df.drop(columns=["source_id"]),
+        hide_index=True,
+        use_container_width=True,
+        disabled=["File", "Sheet", "Runners", "Rows", "Cols", "Suggestion"],
+        column_config={
+            "Keep": st.column_config.CheckboxColumn("Keep", required=True),
+            "Runners": st.column_config.NumberColumn("Runners", help="Estimated runner rows"),
+        },
+        key="source_keep_editor",
+    )
+    for i, row in edited_keep.iterrows():
+        sid = analysis_df.at[i, "source_id"]
+        st.session_state["source_keep"][sid] = bool(row["Keep"])
 
     kept_sources = [
         s for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)
     ]
     if not kept_sources:
-        st.warning("Select at least one source to keep before mapping/cleaning.")
+        st.warning("Keep at least one source before mapping.")
         save_persisted_state()
         st.stop()
 
-    st.subheader("Step B: Map Kept Sources")
-    st.caption("Map only important fields first. Advanced fields are optional.")
+    st.subheader("2) Map Columns (one source at a time)")
+    st.caption("Pick a file/sheet, check auto-map, fix only what looks wrong.")
 
+    source_labels = {source_label(s): s for s in kept_sources}
+    selected_label = st.selectbox(
+        "Working on",
+        options=list(source_labels.keys()),
+        key="active_map_source_label",
+    )
+    active_source = source_labels[selected_label]
+    active_sid = str(active_source["source_id"])
+    active_df = active_source["df"]  # type: ignore[assignment]
+    active_cols = list(active_source["columns"])  # type: ignore[arg-type]
+    active_guess = guess_mapping(active_cols)
+    active_options = ["<None>"] + active_cols
+
+    map_info1, map_info2, map_info3 = st.columns(3)
+    map_info1.metric("Runners", estimate_runner_count(active_df))
+    map_info2.metric("Rows", int(active_source["rows"]))
+    map_info3.metric("Columns", len(active_cols))
+
+    with st.expander("Preview this source (first 8 rows)", expanded=False):
+        st.dataframe(active_df.head(8), use_container_width=True)
+
+    # Build mappings for ALL kept sources every run (so value mapping gets every file).
     source_mappings: Dict[str, Dict[str, Optional[str]]] = {}
-    map_tabs = st.tabs([source_label(source) for source in kept_sources])
-    for tab, source in zip(map_tabs, kept_sources):
+    for source in kept_sources:
         sid = str(source["source_id"])
-        df = source["df"]  # type: ignore[assignment]
         cols = list(source["columns"])  # type: ignore[arg-type]
         guessed = guess_mapping(cols)
         options = ["<None>"] + cols
+        mapping: Dict[str, Optional[str]] = {}
+        for field in CANONICAL_FIELDS:
+            key = map_key(sid, field)
+            if key in st.session_state and st.session_state[key] in options:
+                picked = st.session_state[key]
+            else:
+                guessed_col = guessed.get(field)
+                picked = guessed_col if guessed_col in options else "<None>"
+                if key not in st.session_state:
+                    st.session_state[key] = picked
+            mapping[field] = None if picked == "<None>" else picked
+        source_mappings[sid] = mapping
 
-        with tab:
-            runner_rows = estimate_runner_count(df)
-            st.caption(
-                f"Runner rows: {runner_rows} | total rows: {source['rows']} | "
-                f"columns: {len(cols)}"
+    st.markdown("**Essential columns**")
+    essential_ui = st.columns(2)
+    for idx, field in enumerate(ESSENTIAL_MAPPING_FIELDS):
+        col_ui = essential_ui[idx % 2]
+        key = map_key(active_sid, field)
+        current = st.session_state.get(key, active_guess.get(field) or "<None>")
+        default_index = active_options.index(current) if current in active_options else 0
+        picked = col_ui.selectbox(
+            FIELD_LABELS[field],
+            options=active_options,
+            index=default_index,
+            key=key,
+        )
+        source_mappings[active_sid][field] = None if picked == "<None>" else picked
+
+    with st.expander("More columns (optional)", expanded=False):
+        advanced_fields = [f for f in CANONICAL_FIELDS if f not in ESSENTIAL_MAPPING_FIELDS]
+        adv_ui = st.columns(2)
+        for idx, field in enumerate(advanced_fields):
+            col_ui = adv_ui[idx % 2]
+            key = map_key(active_sid, field)
+            current = st.session_state.get(key, active_guess.get(field) or "<None>")
+            default_index = active_options.index(current) if current in active_options else 0
+            picked = col_ui.selectbox(
+                FIELD_LABELS[field],
+                options=active_options,
+                index=default_index,
+                key=key,
             )
-            preview_cols = cols[:10]
-            if preview_cols:
-                st.caption("Detected columns: " + ", ".join(preview_cols) + (" ..." if len(cols) > 10 else ""))
-            mapping: Dict[str, Optional[str]] = {}
+            source_mappings[active_sid][field] = None if picked == "<None>" else picked
 
-            st.markdown("**Essential Mapping**")
-            essential_cols_ui = st.columns(2)
-            for idx, field in enumerate(ESSENTIAL_MAPPING_FIELDS):
-                col_ui = essential_cols_ui[idx % 2]
-                key = map_key(sid, field)
-                default = guessed.get(field)
-                if key in st.session_state:
-                    current = st.session_state[key]
-                    default_index = options.index(current) if current in options else 0
-                else:
-                    default_index = options.index(default) if default in options else 0
-                picked = col_ui.selectbox(
-                    FIELD_LABELS[field],
-                    options=options,
-                    index=default_index,
-                    key=key,
-                )
-                mapping[field] = None if picked == "<None>" else picked
+    for field in CANONICAL_FIELDS:
+        key = map_key(active_sid, field)
+        picked = st.session_state.get(key, "<None>")
+        source_mappings[active_sid][field] = None if picked == "<None>" else picked
 
-            with st.expander("Advanced Mapping (optional)", expanded=False):
-                advanced_fields = [f for f in CANONICAL_FIELDS if f not in ESSENTIAL_MAPPING_FIELDS]
-                adv_cols_ui = st.columns(2)
-                for idx, field in enumerate(advanced_fields):
-                    col_ui = adv_cols_ui[idx % 2]
-                    key = map_key(sid, field)
-                    default = guessed.get(field)
-                    if key in st.session_state:
-                        current = st.session_state[key]
-                        default_index = options.index(current) if current in options else 0
-                    else:
-                        default_index = options.index(default) if default in options else 0
-                    picked = col_ui.selectbox(
-                        FIELD_LABELS[field],
-                        options=options,
-                        index=default_index,
-                        key=key,
-                    )
-                    mapping[field] = None if picked == "<None>" else picked
-
-            dob_col = mapping.get("dob")
-            if dob_col:
-                extra_dob_cols = [
-                    c for c in find_dob_source_columns(df, dob_col) if c != dob_col  # type: ignore[arg-type]
-                ]
-                if extra_dob_cols:
-                    st.caption(
-                        "DOB merge enabled: will use first non-empty value from -> "
-                        + ", ".join([dob_col] + extra_dob_cols)
-                    )
-
-            mapped_count = mapped_field_count(mapping)
-            st.caption(f"Mapped fields: {mapped_count}/{len(CANONICAL_FIELDS)}")
-            with st.expander("Preview first 8 rows", expanded=False):
-                st.dataframe(df.head(8), use_container_width=True)
-            source_mappings[sid] = mapping
+    status_rows = []
+    for source in kept_sources:
+        sid = str(source["source_id"])
+        mapping = source_mappings[sid]
+        status_rows.append(
+            {
+                "Source": source_label(source),
+                "Mapped": mapped_field_count(mapping),
+                "Category col": mapping.get("category") or "—",
+                "T-Shirt col": mapping.get("tshirt_size") or "—",
+                "Phone col": mapping.get("phone") or "—",
+                "DOB col": mapping.get("dob") or "—",
+            }
+        )
+    st.markdown("**Mapping status (all kept sources)**")
+    st.dataframe(pd.DataFrame(status_rows), hide_index=True, use_container_width=True)
 
     age_as_on = st.date_input(
         "Age calculation date (as on)",
@@ -2127,245 +2216,104 @@ if all_sources:
         key="age_as_on_date",
     )
 
-    # Aggregate category / t-shirt values across kept sources.
     category_map: Dict[str, str] = {}
     tshirt_map: Dict[str, str] = {}
 
-    cat_series_parts: List[pd.Series] = []
-    for source in kept_sources:
-        sid = str(source["source_id"])
-        cat_col = source_mappings[sid].get("category")
-        if not cat_col:
-            continue
-        df = source["df"]  # type: ignore[assignment]
-        part = (
-            df[cat_col]
-            .fillna("")
-            .astype(str)
-            .map(strip_formula)
-            .map(clean_spaces)
-            .replace("", ".")
-        )
-        cat_series_parts.append(part)
+    st.subheader("3) Map Category & T-Shirt Values (all kept sources)")
+    st.caption(
+        "Every kept file/sheet is listed with its own raw values. "
+        "Edit Mapped Value. Same raw text across files shares one mapping."
+    )
 
-    if cat_series_parts:
-        st.subheader("Step 2: Category Manual Mapping")
-        cat_series = pd.concat(cat_series_parts, ignore_index=True)
-        raw_categories = sorted(cat_series.drop_duplicates().tolist())
-        cat_counts = cat_series.value_counts().to_dict()
+    cat_breakdown = collect_raw_value_breakdown(kept_sources, source_mappings, "category")
+    if not cat_breakdown.empty:
+        cat_fingerprint = tuple(
+            zip(cat_breakdown["Source"], cat_breakdown["Raw Value"], cat_breakdown["Rows"])
+        )
         if (
-            "category_map_df" not in st.session_state
-            or st.session_state.get("category_map_source") != tuple(raw_categories)
+            "category_edit_df" not in st.session_state
+            or st.session_state.get("category_edit_fp") != cat_fingerprint
         ):
-            st.session_state["category_map_df"] = pd.DataFrame(
-                {"Raw Category": raw_categories, "Mapped Category": raw_categories}
-            )
-            st.session_state["category_map_source"] = tuple(raw_categories)
-            st.session_state["category_groups"] = [{"selected": [], "name": ""}]
-        elif "category_groups" not in st.session_state:
-            st.session_state["category_groups"] = [{"selected": [], "name": ""}]
+            prev = st.session_state.get("category_edit_df")
+            prev_map: Dict[str, str] = {}
+            if isinstance(prev, pd.DataFrame) and not prev.empty and "Raw Value" in prev.columns:
+                prev_map = sync_mapped_dict_from_editor(prev)
+            fresh = cat_breakdown.copy()
+            fresh["Mapped Value"] = fresh["Raw Value"].map(lambda x: prev_map.get(str(x), str(x)))
+            st.session_state["category_edit_df"] = fresh
+            st.session_state["category_edit_fp"] = cat_fingerprint
 
-        st.info("Map similar categories together in groups, then apply all mappings.")
-        st.markdown("**Quick Group Mapping**")
-        for idx, grp in enumerate(st.session_state["category_groups"]):
-            st.markdown(f"**Group {idx + 1}**")
-            used_by_other_groups = set()
-            for j, other_grp in enumerate(st.session_state["category_groups"]):
-                if j == idx:
-                    continue
-                used_by_other_groups.update(other_grp.get("selected", []))
-            available_options = [
-                cat
-                for cat in raw_categories
-                if cat not in used_by_other_groups or cat in grp.get("selected", [])
-            ]
-            current_default = [cat for cat in grp.get("selected", []) if cat in available_options]
-            left, right = st.columns([2, 1])
-            with left:
-                grp["selected"] = st.multiselect(
-                    f"Select raw categories (Group {idx + 1})",
-                    options=available_options,
-                    default=current_default,
-                    key=f"bulk_raw_select_{idx}",
-                    placeholder="Pick one or more categories",
-                )
-            with right:
-                grp["name"] = st.text_input(
-                    f"Mapped name (Group {idx + 1})",
-                    value=grp.get("name", ""),
-                    key=f"bulk_mapped_name_{idx}",
-                    placeholder="e.g. 10KM Defense",
-                )
-
-        btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
-        with btn_col1:
-            add_group_clicked = st.button("Add One More Group", use_container_width=True)
-        with btn_col2:
-            apply_clicked = st.button("Apply All Group Mappings", use_container_width=True)
-        with btn_col3:
-            reset_clicked = st.button("Reset All Category Mappings", use_container_width=True)
-
-        if add_group_clicked:
-            st.session_state["category_groups"].append({"selected": [], "name": ""})
+        st.markdown("**Category values by source**")
+        sources_in_cat = sorted(cat_breakdown["Source"].unique().tolist())
+        st.caption("Showing values from: " + " | ".join(sources_in_cat))
+        edited_cat = st.data_editor(
+            st.session_state["category_edit_df"],
+            hide_index=True,
+            use_container_width=True,
+            disabled=["Source", "Raw Value", "Rows"],
+            column_config={
+                "Mapped Value": st.column_config.TextColumn("Mapped Value", required=True),
+                "Rows": st.column_config.NumberColumn("Rows"),
+            },
+            key="category_value_editor",
+        )
+        st.session_state["category_edit_df"] = edited_cat
+        category_map = sync_mapped_dict_from_editor(edited_cat)
+        if st.button("Reset Category Mappings", key="reset_category_maps"):
+            reset_df = cat_breakdown.copy()
+            reset_df["Mapped Value"] = reset_df["Raw Value"]
+            st.session_state["category_edit_df"] = reset_df
             st.rerun()
-
-        if apply_clicked:
-            tmp_df = st.session_state["category_map_df"].copy()
-            applied = 0
-            for grp in st.session_state["category_groups"]:
-                mapped_name = clean_spaces(grp.get("name", ""))
-                selected_raw = grp.get("selected", [])
-                if not selected_raw or not mapped_name:
-                    continue
-                tmp_df.loc[tmp_df["Raw Category"].isin(selected_raw), "Mapped Category"] = mapped_name
-                applied += len(selected_raw)
-            if applied == 0:
-                st.warning("Add at least one valid group (selected categories + mapped name).")
-            else:
-                st.session_state["category_map_df"] = tmp_df
-                st.success(f"Applied group mappings to {applied} category selections.")
-
-        if reset_clicked:
-            st.session_state["category_map_df"] = pd.DataFrame(
-                {"Raw Category": raw_categories, "Mapped Category": raw_categories}
-            )
-            st.session_state["category_groups"] = [{"selected": [], "name": ""}]
-            st.success("Reset complete. All mapped values restored to original raw categories.")
-
-        map_df = st.session_state["category_map_df"]
-        summary_df = map_df.copy()
-        summary_df["Rows"] = summary_df["Raw Category"].map(lambda x: cat_counts.get(x, 0))
-        summary_df = summary_df[["Raw Category", "Rows", "Mapped Category"]].sort_values(
-            by=["Mapped Category", "Raw Category"]
-        )
-        st.markdown("**Current Mapping Summary**")
-        st.dataframe(summary_df, hide_index=True, use_container_width=True)
-
-        for _, row in map_df.iterrows():
-            category_map[str(row["Raw Category"])] = str(row["Mapped Category"]).strip() or "."
     else:
-        st.info("No category column selected on any kept source. Category output will be '.' where mapped.")
+        st.info("No category column mapped yet on any kept source. Map Category in step 2.")
 
-    tshirt_series_parts: List[pd.Series] = []
-    for source in kept_sources:
-        sid = str(source["source_id"])
-        tshirt_col = source_mappings[sid].get("tshirt_size")
-        if not tshirt_col:
-            continue
-        df = source["df"]  # type: ignore[assignment]
-        part = (
-            df[tshirt_col]
-            .fillna("")
-            .astype(str)
-            .map(strip_formula)
-            .map(clean_spaces)
-            .replace("", ".")
+    tshirt_breakdown = collect_raw_value_breakdown(kept_sources, source_mappings, "tshirt_size")
+    if not tshirt_breakdown.empty:
+        tshirt_fingerprint = tuple(
+            zip(
+                tshirt_breakdown["Source"],
+                tshirt_breakdown["Raw Value"],
+                tshirt_breakdown["Rows"],
+            )
         )
-        tshirt_series_parts.append(part)
-
-    if tshirt_series_parts:
-        st.subheader("Step 3: T-Shirt Size Manual Mapping")
-        tshirt_series = pd.concat(tshirt_series_parts, ignore_index=True)
-        raw_tshirts = sorted(tshirt_series.drop_duplicates().tolist())
-        tshirt_counts = tshirt_series.value_counts().to_dict()
         if (
-            "tshirt_map_df" not in st.session_state
-            or st.session_state.get("tshirt_map_source") != tuple(raw_tshirts)
+            "tshirt_edit_df" not in st.session_state
+            or st.session_state.get("tshirt_edit_fp") != tshirt_fingerprint
         ):
-            st.session_state["tshirt_map_df"] = pd.DataFrame(
-                {"Raw T-Shirt Size": raw_tshirts, "Mapped T-Shirt Size": raw_tshirts}
-            )
-            st.session_state["tshirt_map_source"] = tuple(raw_tshirts)
-            st.session_state["tshirt_groups"] = [{"selected": [], "name": ""}]
-        elif "tshirt_groups" not in st.session_state:
-            st.session_state["tshirt_groups"] = [{"selected": [], "name": ""}]
+            prev = st.session_state.get("tshirt_edit_df")
+            prev_map = {}
+            if isinstance(prev, pd.DataFrame) and not prev.empty and "Raw Value" in prev.columns:
+                prev_map = sync_mapped_dict_from_editor(prev)
+            fresh = tshirt_breakdown.copy()
+            fresh["Mapped Value"] = fresh["Raw Value"].map(lambda x: prev_map.get(str(x), str(x)))
+            st.session_state["tshirt_edit_df"] = fresh
+            st.session_state["tshirt_edit_fp"] = tshirt_fingerprint
 
-        st.info("Map similar T-shirt values together in groups, then apply all mappings.")
-        st.markdown("**Quick T-Shirt Group Mapping**")
-        for idx, grp in enumerate(st.session_state["tshirt_groups"]):
-            st.markdown(f"**T-Shirt Group {idx + 1}**")
-            used_by_other_groups = set()
-            for j, other_grp in enumerate(st.session_state["tshirt_groups"]):
-                if j == idx:
-                    continue
-                used_by_other_groups.update(other_grp.get("selected", []))
-            available_options = [
-                size
-                for size in raw_tshirts
-                if size not in used_by_other_groups or size in grp.get("selected", [])
-            ]
-            current_default = [size for size in grp.get("selected", []) if size in available_options]
-            left, right = st.columns([2, 1])
-            with left:
-                grp["selected"] = st.multiselect(
-                    f"Select raw T-shirt sizes (Group {idx + 1})",
-                    options=available_options,
-                    default=current_default,
-                    key=f"tshirt_bulk_raw_select_{idx}",
-                    placeholder="Pick one or more T-shirt values",
-                )
-            with right:
-                grp["name"] = st.text_input(
-                    f"Mapped T-shirt size (Group {idx + 1})",
-                    value=grp.get("name", ""),
-                    key=f"tshirt_bulk_mapped_name_{idx}",
-                    placeholder="e.g. M",
-                )
-
-        tshirt_btn_col1, tshirt_btn_col2, tshirt_btn_col3 = st.columns([1, 1, 1])
-        with tshirt_btn_col1:
-            tshirt_add_group_clicked = st.button("Add One More T-Shirt Group", use_container_width=True)
-        with tshirt_btn_col2:
-            tshirt_apply_clicked = st.button("Apply All T-Shirt Group Mappings", use_container_width=True)
-        with tshirt_btn_col3:
-            tshirt_reset_clicked = st.button("Reset All T-Shirt Mappings", use_container_width=True)
-
-        if tshirt_add_group_clicked:
-            st.session_state["tshirt_groups"].append({"selected": [], "name": ""})
-            st.rerun()
-
-        if tshirt_apply_clicked:
-            tmp_df = st.session_state["tshirt_map_df"].copy()
-            applied = 0
-            for grp in st.session_state["tshirt_groups"]:
-                mapped_name = clean_spaces(grp.get("name", ""))
-                selected_raw = grp.get("selected", [])
-                if not selected_raw or not mapped_name:
-                    continue
-                tmp_df.loc[
-                    tmp_df["Raw T-Shirt Size"].isin(selected_raw), "Mapped T-Shirt Size"
-                ] = mapped_name
-                applied += len(selected_raw)
-            if applied == 0:
-                st.warning("Add at least one valid T-shirt group (selected values + mapped name).")
-            else:
-                st.session_state["tshirt_map_df"] = tmp_df
-                st.success(f"Applied T-shirt mappings to {applied} selections.")
-
-        if tshirt_reset_clicked:
-            st.session_state["tshirt_map_df"] = pd.DataFrame(
-                {"Raw T-Shirt Size": raw_tshirts, "Mapped T-Shirt Size": raw_tshirts}
-            )
-            st.session_state["tshirt_groups"] = [{"selected": [], "name": ""}]
-            st.success("Reset complete. All T-shirt mapped values restored to original raw values.")
-
-        tshirt_df = st.session_state["tshirt_map_df"]
-        tshirt_summary_df = tshirt_df.copy()
-        tshirt_summary_df["Rows"] = tshirt_summary_df["Raw T-Shirt Size"].map(
-            lambda x: tshirt_counts.get(x, 0)
+        st.markdown("**T-Shirt values by source**")
+        sources_in_tshirt = sorted(tshirt_breakdown["Source"].unique().tolist())
+        st.caption("Showing values from: " + " | ".join(sources_in_tshirt))
+        edited_tshirt = st.data_editor(
+            st.session_state["tshirt_edit_df"],
+            hide_index=True,
+            use_container_width=True,
+            disabled=["Source", "Raw Value", "Rows"],
+            column_config={
+                "Mapped Value": st.column_config.TextColumn("Mapped Value", required=True),
+                "Rows": st.column_config.NumberColumn("Rows"),
+            },
+            key="tshirt_value_editor",
         )
-        tshirt_summary_df = tshirt_summary_df[
-            ["Raw T-Shirt Size", "Rows", "Mapped T-Shirt Size"]
-        ].sort_values(by=["Mapped T-Shirt Size", "Raw T-Shirt Size"])
-        st.markdown("**Current T-Shirt Mapping Summary**")
-        st.dataframe(tshirt_summary_df, hide_index=True, use_container_width=True)
-
-        for _, row in tshirt_df.iterrows():
-            tshirt_map[str(row["Raw T-Shirt Size"])] = str(row["Mapped T-Shirt Size"]).strip() or "."
+        st.session_state["tshirt_edit_df"] = edited_tshirt
+        tshirt_map = sync_mapped_dict_from_editor(edited_tshirt)
+        if st.button("Reset T-Shirt Mappings", key="reset_tshirt_maps"):
+            reset_df = tshirt_breakdown.copy()
+            reset_df["Mapped Value"] = reset_df["Raw Value"]
+            st.session_state["tshirt_edit_df"] = reset_df
+            st.rerun()
     else:
-        st.info("No T-shirt size column selected on any kept source. T-Shirt Size output will be '.' where mapped.")
+        st.info("No T-shirt column mapped yet on any kept source. Map T-Shirt Size in step 2.")
 
-    st.subheader("Error Highlight Guide")
+    st.subheader("4) Clean & Download")
     render_error_legend()
 
     if st.button("Run Cleaning", type="primary"):
