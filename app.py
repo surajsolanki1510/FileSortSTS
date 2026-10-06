@@ -1908,7 +1908,7 @@ LANDING_CSS = """
 <style>
 :root {
     --gw: min(78vh, 44vw);
-    --shift: 105px;
+    --shift: 150px;
     --hand-x: calc(var(--gw) * 0.95);
     --hand-y: calc(28vh + var(--shift));
 }
@@ -1945,72 +1945,22 @@ LANDING_CSS = """
     to   { filter: drop-shadow(0 0 30px rgba(255, 214, 10, 0.75)) drop-shadow(0 0 80px rgba(255, 61, 0, 0.50)); }
 }
 
-.ki-ball {
+.palm-glow {
     position: fixed;
-    left: calc(var(--hand-x) - 70px);
-    top: calc(var(--hand-y) - 70px);
-    width: 140px; height: 140px;
+    left: calc(var(--hand-x) - 110px);
+    top: calc(var(--hand-y) - 110px);
+    width: 220px; height: 220px;
     border-radius: 50%;
-    z-index: 6;
+    z-index: 2;
     pointer-events: none;
-    background: radial-gradient(circle, #ffffff 0%, #fff3b0 18%, #ffd60a 34%, #ff8a00 52%, rgba(255, 61, 0, 0.55) 66%, transparent 74%);
-    box-shadow: 0 0 60px 20px rgba(255, 138, 0, 0.65), 0 0 140px 50px rgba(255, 61, 0, 0.35);
-    animation: kiPulse 0.9s ease-in-out infinite alternate;
+    mix-blend-mode: screen;
+    background: radial-gradient(circle, rgba(255, 214, 10, 0.55) 0%, rgba(255, 138, 0, 0.35) 30%, rgba(255, 61, 0, 0.15) 55%, transparent 70%);
+    filter: blur(8px);
+    animation: emberBreath 2.4s ease-in-out infinite;
 }
-.ki-ball::before {
-    content: "";
-    position: absolute;
-    inset: -40px;
-    border-radius: 50%;
-    background: conic-gradient(from 0deg, transparent, rgba(255, 214, 10, 0.75), transparent 22%, rgba(255, 61, 0, 0.7) 40%, transparent 55%, rgba(255, 138, 0, 0.8) 75%, transparent);
-    filter: blur(10px);
-    animation: kiSpin 1.6s linear infinite;
-}
-@keyframes kiPulse {
-    from { transform: scale(0.88); opacity: 0.85; }
-    to   { transform: scale(1.12); opacity: 1; }
-}
-@keyframes kiSpin { to { transform: rotate(360deg); } }
-
-.ki-beam {
-    position: fixed;
-    left: var(--hand-x);
-    top: calc(var(--hand-y) - 46px);
-    width: calc(100vw - var(--hand-x));
-    height: 92px;
-    z-index: 1;
-    pointer-events: none;
-    background:
-        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.0) 0 40px, rgba(255, 243, 176, 0.55) 40px 60px, rgba(255, 255, 255, 0.0) 60px 110px),
-        linear-gradient(180deg, transparent 0%, rgba(255, 61, 0, 0.55) 22%, rgba(255, 214, 10, 0.95) 50%, rgba(255, 61, 0, 0.55) 78%, transparent 100%);
-    background-size: 220px 100%, 100% 100%;
-    -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 55%, transparent 100%);
-    mask-image: linear-gradient(90deg, #000 0%, #000 55%, transparent 100%);
-    filter: blur(3px);
-    animation: beamFlow 0.6s linear infinite, beamFlicker 0.25s ease-in-out infinite alternate;
-}
-@keyframes beamFlow { to { background-position: 220px 0, 0 0; } }
-@keyframes beamFlicker {
-    from { opacity: 0.75; transform: scaleY(0.85); }
-    to   { opacity: 1;    transform: scaleY(1.08); }
-}
-
-.ki-spark {
-    position: fixed;
-    left: var(--hand-x);
-    top: var(--hand-y);
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    z-index: 1;
-    pointer-events: none;
-    background: radial-gradient(circle, #fff3b0 0%, #ff8a00 55%, transparent 72%);
-    box-shadow: 0 0 12px 4px rgba(255, 138, 0, 0.8);
-    animation: sparkFly linear infinite;
-    opacity: 0;
-}
-@keyframes sparkFly {
-    0%   { transform: translate(0, 0) scale(1.2); opacity: 1; }
-    100% { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; }
+@keyframes emberBreath {
+    0%, 100% { opacity: 0.55; transform: scale(0.92); }
+    50%      { opacity: 1;    transform: scale(1.06); }
 }
 
 .upload-call {
@@ -2034,76 +1984,111 @@ LANDING_CSS = """
 [data-testid="stFileUploader"] {
     position: relative;
     z-index: 5;
+    margin-top: 46px;
     border: none !important;
     padding: 22px 20px !important;
-    background: rgba(14, 8, 24, 0.80) !important;
+    background: linear-gradient(160deg, rgba(30, 12, 22, 0.88), rgba(12, 7, 22, 0.90)) !important;
     backdrop-filter: blur(6px);
-    animation: uploaderBlaze 1.2s ease-in-out infinite alternate;
+    animation: heatOrbit 4s linear infinite;
+    transition: transform 0.35s ease;
 }
+[data-testid="stFileUploader"]:hover { transform: translateY(-2px); }
+[data-testid="stFileUploaderDropzone"] { position: static !important; }
+
+/* Rotating molten edge */
 [data-testid="stFileUploader"]::before {
     content: "";
     position: absolute;
-    inset: -3px;
-    padding: 3px;
+    inset: -2px;
+    padding: 2px;
     border-radius: 20px;
-    background: conic-gradient(from var(--blaze-angle), var(--fire-deep), var(--fire-hot), #fff3b0, var(--fire-mid), var(--ember), var(--fire-deep));
+    background: conic-gradient(from var(--blaze-angle), var(--fire-deep), var(--fire-mid), #fff3b0, var(--fire-hot), var(--fire-deep), var(--ember), var(--fire-deep));
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
-    animation: blazeSpin 2.2s linear infinite;
+    animation: blazeSpin 4s linear infinite;
     pointer-events: none;
 }
-[data-testid="stFileUploader"]::after {
+
+/* Flame tongues rising from the top edge, drifting along the border */
+[data-testid="stFileUploaderDropzone"]::before {
     content: "";
     position: absolute;
-    left: 4%; right: 4%;
-    top: -34px;
-    height: 46px;
+    left: 10px; right: 10px;
+    top: -44px;
+    height: 48px;
     pointer-events: none;
     background:
-        radial-gradient(18px 34px at 8% 100%, rgba(255, 214, 10, 0.9), transparent 70%),
-        radial-gradient(22px 40px at 22% 100%, rgba(255, 138, 0, 0.9), transparent 70%),
-        radial-gradient(16px 30px at 37% 100%, rgba(255, 61, 0, 0.9), transparent 70%),
-        radial-gradient(24px 44px at 52% 100%, rgba(255, 214, 10, 0.9), transparent 70%),
-        radial-gradient(18px 32px at 67% 100%, rgba(255, 138, 0, 0.9), transparent 70%),
-        radial-gradient(22px 42px at 82% 100%, rgba(255, 61, 0, 0.9), transparent 70%),
-        radial-gradient(16px 30px at 95% 100%, rgba(255, 214, 10, 0.9), transparent 70%);
-    filter: blur(4px);
+        radial-gradient(ellipse 11px 26px at 50% 100%, #fff3b0 0%, var(--fire-hot) 25%, var(--fire-mid) 50%, transparent 72%),
+        radial-gradient(ellipse 15px 38px at 50% 100%, var(--fire-hot) 0%, var(--fire-mid) 35%, var(--fire-deep) 60%, transparent 75%);
+    background-size: 30px 100%, 52px 100%;
+    background-repeat: repeat-x;
+    background-position: 0 100%, 14px 100%;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    filter: blur(2.5px);
     transform-origin: bottom;
-    animation: flameLick 0.45s ease-in-out infinite alternate;
+    animation: flameDrift 3s linear infinite, flameDance 1.1s ease-in-out infinite alternate;
+    transition: height 0.35s ease, top 0.35s ease, filter 0.35s ease;
 }
+
+/* Low embers glowing under the bottom edge */
+[data-testid="stFileUploaderDropzone"]::after {
+    content: "";
+    position: absolute;
+    left: 16px; right: 16px;
+    bottom: -16px;
+    height: 22px;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse 12px 14px at 50% 0%, var(--fire-hot) 0%, var(--fire-mid) 40%, transparent 72%);
+    background-size: 40px 100%;
+    background-repeat: repeat-x;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+    filter: blur(3px);
+    opacity: 0.75;
+    animation: flameDriftBack 4s linear infinite;
+}
+
+[data-testid="stFileUploader"]:hover [data-testid="stFileUploaderDropzone"]::before {
+    top: -66px;
+    height: 70px;
+    filter: blur(2px) brightness(1.25);
+}
+[data-testid="stFileUploader"]:hover { animation-duration: 2s; }
+[data-testid="stFileUploader"]:hover button {
+    box-shadow: 0 0 30px rgba(255, 190, 0, 0.95), 0 0 60px rgba(255, 61, 0, 0.55) !important;
+}
+
 @keyframes blazeSpin { to { --blaze-angle: 360deg; } }
-@keyframes flameLick {
-    0%   { transform: scaleY(0.75) skewX(-4deg); opacity: 0.8; }
-    100% { transform: scaleY(1.15) skewX(4deg);  opacity: 1; }
+@keyframes heatOrbit {
+    0%   { box-shadow: 0 0 40px rgba(255, 61, 0, 0.18) inset, -10px -6px 34px rgba(255, 61, 0, 0.75), 10px 6px 34px rgba(255, 214, 10, 0.55), 0 0 90px rgba(255, 138, 0, 0.30); }
+    25%  { box-shadow: 0 0 40px rgba(255, 61, 0, 0.18) inset, 10px -6px 38px rgba(255, 61, 0, 0.85), -10px 6px 30px rgba(255, 214, 10, 0.50), 0 0 110px rgba(255, 138, 0, 0.40); }
+    50%  { box-shadow: 0 0 40px rgba(255, 61, 0, 0.18) inset, 10px 6px 34px rgba(255, 61, 0, 0.75), -10px -6px 34px rgba(255, 214, 10, 0.55), 0 0 90px rgba(255, 138, 0, 0.30); }
+    75%  { box-shadow: 0 0 40px rgba(255, 61, 0, 0.18) inset, -10px 6px 38px rgba(255, 61, 0, 0.85), 10px -6px 30px rgba(255, 214, 10, 0.50), 0 0 110px rgba(255, 138, 0, 0.40); }
+    100% { box-shadow: 0 0 40px rgba(255, 61, 0, 0.18) inset, -10px -6px 34px rgba(255, 61, 0, 0.75), 10px 6px 34px rgba(255, 214, 10, 0.55), 0 0 90px rgba(255, 138, 0, 0.30); }
 }
-@keyframes uploaderBlaze {
-    from { box-shadow: 0 0 30px rgba(255, 61, 0, 0.45), 0 0 70px rgba(255, 138, 0, 0.20); }
-    to   { box-shadow: 0 0 50px rgba(255, 160, 0, 0.80), 0 0 120px rgba(255, 61, 0, 0.40); }
+@keyframes flameDrift { to { background-position: 30px 100%, 66px 100%; } }
+@keyframes flameDriftBack { to { background-position: -40px 0; } }
+@keyframes flameDance {
+    0%   { transform: scaleY(0.82); opacity: 0.85; }
+    50%  { transform: scaleY(1.05); opacity: 1; }
+    100% { transform: scaleY(0.92); opacity: 0.9; }
 }
 
 @media (max-width: 900px) {
-    .goku-hero, .ki-ball, .ki-beam, .ki-spark { display: none; }
+    .goku-hero, .palm-glow { display: none; }
     .block-container { padding-left: 1rem !important; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .goku-hero, .ki-ball, .ki-ball::before, .ki-beam, .ki-spark, .upload-call,
+    .goku-hero, .palm-glow, .upload-call,
     [data-testid="stFileUploader"], [data-testid="stFileUploader"]::before,
-    [data-testid="stFileUploader"]::after { animation: none !important; }
+    [data-testid="stFileUploaderDropzone"]::before,
+    [data-testid="stFileUploaderDropzone"]::after { animation: none !important; }
 }
 </style>
 """
-
-_KI_SPARKS = "".join(
-    f'<span class="ki-spark" style="--dx:{dx}px; --dy:{dy}px; '
-    f'animation-duration:{dur}s; animation-delay:{delay}s;"></span>'
-    for dx, dy, dur, delay in [
-        (420, -60, 1.1, 0.0), (520, 40, 1.3, 0.2), (360, -110, 0.9, 0.4),
-        (600, 90, 1.5, 0.1), (300, 70, 0.8, 0.6), (480, -20, 1.2, 0.8),
-        (650, -90, 1.6, 0.3), (380, 120, 1.0, 0.5), (240, -40, 0.7, 0.9),
-    ]
-)
-
 
 def render_landing_scene() -> None:
     img_b64 = load_hero_image_b64()
@@ -2114,7 +2099,7 @@ def render_landing_scene() -> None:
     )
     st.markdown(LANDING_CSS, unsafe_allow_html=True)
     st.markdown(
-        f'{hero_img}<div class="ki-beam"></div><div class="ki-ball"></div>{_KI_SPARKS}'
+        f'{hero_img}<div class="palm-glow"></div>'
         '<div class="landing-brand">Sports Timing Solutions &middot; <b>FileSort Cleaner</b></div>'
         '<div class="upload-call">Upload Your File</div>',
         unsafe_allow_html=True,
