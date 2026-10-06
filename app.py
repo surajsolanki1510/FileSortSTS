@@ -1,8 +1,10 @@
+import base64
 import hashlib
 import io
 import re
 import uuid
 from datetime import date, datetime
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -1893,6 +1895,232 @@ def render_value_map_editor(
     return new_map
 
 
+@st.cache_resource
+def load_hero_image_b64() -> str:
+    path = Path(__file__).parent / "assets" / "goku.webp"
+    try:
+        return base64.b64encode(path.read_bytes()).decode("ascii")
+    except OSError:
+        return ""
+
+
+LANDING_CSS = """
+<style>
+:root {
+    --gw: min(78vh, 44vw);
+    --shift: 105px;
+    --hand-x: calc(var(--gw) * 0.95);
+    --hand-y: calc(28vh + var(--shift));
+}
+.block-container {
+    padding-left: calc(var(--gw) + 2rem) !important;
+    padding-top: max(1rem, calc(28vh - 170px)) !important;
+    max-width: none !important;
+}
+.hero { display: none; }
+.landing-brand {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.78rem;
+    letter-spacing: 0.38em;
+    text-transform: uppercase;
+    color: var(--neon);
+    text-shadow: 0 0 14px rgba(0, 229, 255, 0.75);
+}
+.landing-brand b { color: var(--fire-hot); text-shadow: 0 0 14px rgba(255, 214, 10, 0.7); }
+
+.goku-hero {
+    position: fixed;
+    left: 0; top: var(--shift);
+    height: 100vh;
+    width: var(--gw);
+    object-fit: contain;
+    object-position: left top;
+    z-index: 1;
+    pointer-events: none;
+    filter: drop-shadow(0 0 22px rgba(255, 138, 0, 0.55)) drop-shadow(0 0 60px rgba(255, 61, 0, 0.35));
+    animation: gokuAura 2.4s ease-in-out infinite alternate;
+}
+@keyframes gokuAura {
+    from { filter: drop-shadow(0 0 16px rgba(255, 138, 0, 0.45)) drop-shadow(0 0 46px rgba(255, 61, 0, 0.25)); }
+    to   { filter: drop-shadow(0 0 30px rgba(255, 214, 10, 0.75)) drop-shadow(0 0 80px rgba(255, 61, 0, 0.50)); }
+}
+
+.ki-ball {
+    position: fixed;
+    left: calc(var(--hand-x) - 70px);
+    top: calc(var(--hand-y) - 70px);
+    width: 140px; height: 140px;
+    border-radius: 50%;
+    z-index: 6;
+    pointer-events: none;
+    background: radial-gradient(circle, #ffffff 0%, #fff3b0 18%, #ffd60a 34%, #ff8a00 52%, rgba(255, 61, 0, 0.55) 66%, transparent 74%);
+    box-shadow: 0 0 60px 20px rgba(255, 138, 0, 0.65), 0 0 140px 50px rgba(255, 61, 0, 0.35);
+    animation: kiPulse 0.9s ease-in-out infinite alternate;
+}
+.ki-ball::before {
+    content: "";
+    position: absolute;
+    inset: -40px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent, rgba(255, 214, 10, 0.75), transparent 22%, rgba(255, 61, 0, 0.7) 40%, transparent 55%, rgba(255, 138, 0, 0.8) 75%, transparent);
+    filter: blur(10px);
+    animation: kiSpin 1.6s linear infinite;
+}
+@keyframes kiPulse {
+    from { transform: scale(0.88); opacity: 0.85; }
+    to   { transform: scale(1.12); opacity: 1; }
+}
+@keyframes kiSpin { to { transform: rotate(360deg); } }
+
+.ki-beam {
+    position: fixed;
+    left: var(--hand-x);
+    top: calc(var(--hand-y) - 46px);
+    width: calc(100vw - var(--hand-x));
+    height: 92px;
+    z-index: 1;
+    pointer-events: none;
+    background:
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.0) 0 40px, rgba(255, 243, 176, 0.55) 40px 60px, rgba(255, 255, 255, 0.0) 60px 110px),
+        linear-gradient(180deg, transparent 0%, rgba(255, 61, 0, 0.55) 22%, rgba(255, 214, 10, 0.95) 50%, rgba(255, 61, 0, 0.55) 78%, transparent 100%);
+    background-size: 220px 100%, 100% 100%;
+    -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 55%, transparent 100%);
+    mask-image: linear-gradient(90deg, #000 0%, #000 55%, transparent 100%);
+    filter: blur(3px);
+    animation: beamFlow 0.6s linear infinite, beamFlicker 0.25s ease-in-out infinite alternate;
+}
+@keyframes beamFlow { to { background-position: 220px 0, 0 0; } }
+@keyframes beamFlicker {
+    from { opacity: 0.75; transform: scaleY(0.85); }
+    to   { opacity: 1;    transform: scaleY(1.08); }
+}
+
+.ki-spark {
+    position: fixed;
+    left: var(--hand-x);
+    top: var(--hand-y);
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    z-index: 1;
+    pointer-events: none;
+    background: radial-gradient(circle, #fff3b0 0%, #ff8a00 55%, transparent 72%);
+    box-shadow: 0 0 12px 4px rgba(255, 138, 0, 0.8);
+    animation: sparkFly linear infinite;
+    opacity: 0;
+}
+@keyframes sparkFly {
+    0%   { transform: translate(0, 0) scale(1.2); opacity: 1; }
+    100% { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; }
+}
+
+.upload-call {
+    font-family: 'Bebas Neue', 'Orbitron', sans-serif;
+    font-size: clamp(2rem, 4vw, 3.4rem);
+    letter-spacing: 0.08em;
+    margin: 4px 0 10px;
+    background: linear-gradient(180deg, #fff8d6 0%, var(--fire-hot) 35%, var(--fire-mid) 60%, var(--fire-deep) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: heatFlicker 1.8s ease-in-out infinite;
+}
+
+@property --blaze-angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+}
+[data-testid="stFileUploader"] {
+    position: relative;
+    z-index: 5;
+    border: none !important;
+    padding: 22px 20px !important;
+    background: rgba(14, 8, 24, 0.80) !important;
+    backdrop-filter: blur(6px);
+    animation: uploaderBlaze 1.2s ease-in-out infinite alternate;
+}
+[data-testid="stFileUploader"]::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    padding: 3px;
+    border-radius: 20px;
+    background: conic-gradient(from var(--blaze-angle), var(--fire-deep), var(--fire-hot), #fff3b0, var(--fire-mid), var(--ember), var(--fire-deep));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: blazeSpin 2.2s linear infinite;
+    pointer-events: none;
+}
+[data-testid="stFileUploader"]::after {
+    content: "";
+    position: absolute;
+    left: 4%; right: 4%;
+    top: -34px;
+    height: 46px;
+    pointer-events: none;
+    background:
+        radial-gradient(18px 34px at 8% 100%, rgba(255, 214, 10, 0.9), transparent 70%),
+        radial-gradient(22px 40px at 22% 100%, rgba(255, 138, 0, 0.9), transparent 70%),
+        radial-gradient(16px 30px at 37% 100%, rgba(255, 61, 0, 0.9), transparent 70%),
+        radial-gradient(24px 44px at 52% 100%, rgba(255, 214, 10, 0.9), transparent 70%),
+        radial-gradient(18px 32px at 67% 100%, rgba(255, 138, 0, 0.9), transparent 70%),
+        radial-gradient(22px 42px at 82% 100%, rgba(255, 61, 0, 0.9), transparent 70%),
+        radial-gradient(16px 30px at 95% 100%, rgba(255, 214, 10, 0.9), transparent 70%);
+    filter: blur(4px);
+    transform-origin: bottom;
+    animation: flameLick 0.45s ease-in-out infinite alternate;
+}
+@keyframes blazeSpin { to { --blaze-angle: 360deg; } }
+@keyframes flameLick {
+    0%   { transform: scaleY(0.75) skewX(-4deg); opacity: 0.8; }
+    100% { transform: scaleY(1.15) skewX(4deg);  opacity: 1; }
+}
+@keyframes uploaderBlaze {
+    from { box-shadow: 0 0 30px rgba(255, 61, 0, 0.45), 0 0 70px rgba(255, 138, 0, 0.20); }
+    to   { box-shadow: 0 0 50px rgba(255, 160, 0, 0.80), 0 0 120px rgba(255, 61, 0, 0.40); }
+}
+
+@media (max-width: 900px) {
+    .goku-hero, .ki-ball, .ki-beam, .ki-spark { display: none; }
+    .block-container { padding-left: 1rem !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .goku-hero, .ki-ball, .ki-ball::before, .ki-beam, .ki-spark, .upload-call,
+    [data-testid="stFileUploader"], [data-testid="stFileUploader"]::before,
+    [data-testid="stFileUploader"]::after { animation: none !important; }
+}
+</style>
+"""
+
+_KI_SPARKS = "".join(
+    f'<span class="ki-spark" style="--dx:{dx}px; --dy:{dy}px; '
+    f'animation-duration:{dur}s; animation-delay:{delay}s;"></span>'
+    for dx, dy, dur, delay in [
+        (420, -60, 1.1, 0.0), (520, 40, 1.3, 0.2), (360, -110, 0.9, 0.4),
+        (600, 90, 1.5, 0.1), (300, 70, 0.8, 0.6), (480, -20, 1.2, 0.8),
+        (650, -90, 1.6, 0.3), (380, 120, 1.0, 0.5), (240, -40, 0.7, 0.9),
+    ]
+)
+
+
+def render_landing_scene() -> None:
+    img_b64 = load_hero_image_b64()
+    hero_img = (
+        f'<img class="goku-hero" src="data:image/webp;base64,{img_b64}" alt="">'
+        if img_b64
+        else ""
+    )
+    st.markdown(LANDING_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f'{hero_img}<div class="ki-beam"></div><div class="ki-ball"></div>{_KI_SPARKS}'
+        '<div class="landing-brand">Sports Timing Solutions &middot; <b>FileSort Cleaner</b></div>'
+        '<div class="upload-call">Upload Your File</div>',
+        unsafe_allow_html=True,
+    )
+
+
 restore_persisted_state()
 if "upload_widget_nonce" not in st.session_state:
     st.session_state["upload_widget_nonce"] = 0
@@ -1902,6 +2130,8 @@ if "loaded_files" not in st.session_state:
     st.session_state["loaded_files"] = {}
 
 upload_key = f"source_upload_{st.session_state['upload_widget_nonce']}"
+if not st.session_state.get("loaded_files") and not st.session_state.get(upload_key):
+    render_landing_scene()
 uploaded_files = st.file_uploader(
     "Upload CSV/XLSX/XLS (multiple files allowed)",
     type=["csv", "xlsx", "xls"],
