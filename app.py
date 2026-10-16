@@ -1897,7 +1897,7 @@ def render_value_map_editor(
 
 @st.cache_resource
 def load_hero_image_b64() -> str:
-    path = Path(__file__).parent / "assets" / "goku.webp"
+    path = Path(__file__).parent / "assets" / "goku.png"
     try:
         return base64.b64encode(path.read_bytes()).decode("ascii")
     except OSError:
@@ -2031,7 +2031,7 @@ LANDING_CSS = """
 def render_landing_scene() -> None:
     img_b64 = load_hero_image_b64()
     hero_img = (
-        f'<img class="goku-hero" src="data:image/webp;base64,{img_b64}" alt="">'
+        f'<img class="goku-hero" src="data:image/png;base64,{img_b64}" alt="">'
         if img_b64
         else ""
     )
