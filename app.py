@@ -1906,17 +1906,29 @@ def load_hero_image_b64() -> str:
 
 LANDING_CSS = """
 <style>
+/* Pure black canvas on landing — keep ember / fire-floor particles */
+.stApp {
+    background: #000000 !important;
+}
+.stApp::before {
+    opacity: 0.35;
+    background: radial-gradient(ellipse 70% 50% at 18% 70%, rgba(255, 90, 0, 0.22), transparent 65%) !important;
+    filter: blur(40px);
+    animation: none !important;
+}
+.stApp::after { opacity: 0.18; }
+
 :root {
-    /* New asset is landscape (~1.5:1); size by height, hands sit ~72% x / 48% y */
-    --gh: min(92vh, 78vw);
-    --gw: calc(var(--gh) * 1.5);
-    --shift: 4vh;
-    --hand-x: calc(var(--gw) * 0.74);
-    --hand-y: calc(var(--shift) + var(--gh) * 0.48);
+    /* Bottom-left, taller than half screen; cover-crop keeps hands at the right edge */
+    --gh: 78vh;
+    --gw: min(48vw, calc(var(--gh) * 1.15));
+    --hand-x: var(--gw);
+    --hand-y: calc(100vh - var(--gh) * 0.38);
 }
 .block-container {
-    padding-left: min(calc(var(--hand-x) + 1.2rem), 46vw) !important;
-    padding-top: max(0.4rem, calc(var(--hand-y) - 290px)) !important;
+    padding-left: calc(var(--gw) + 1.6rem) !important;
+    padding-right: 2rem !important;
+    padding-top: max(4vh, calc(var(--hand-y) - 280px)) !important;
     max-width: none !important;
 }
 .hero { display: none; }
@@ -1932,32 +1944,33 @@ LANDING_CSS = """
 
 .goku-hero {
     position: fixed;
-    left: 0; top: var(--shift);
+    left: 0;
+    bottom: 0;
     height: var(--gh);
     width: var(--gw);
-    object-fit: contain;
-    object-position: left center;
+    object-fit: cover;
+    object-position: left bottom;
     z-index: 1;
     pointer-events: none;
-    filter: drop-shadow(0 0 18px rgba(255, 150, 40, 0.35));
+    filter: drop-shadow(0 0 22px rgba(255, 160, 40, 0.45)) drop-shadow(0 0 55px rgba(255, 90, 0, 0.28));
 }
 
 .palm-glow {
     position: fixed;
-    left: calc(var(--hand-x) - 70px);
-    top: calc(var(--hand-y) - 70px);
-    width: 140px; height: 140px;
+    left: calc(var(--hand-x) - 36px);
+    top: calc(var(--hand-y) - 48px);
+    width: 96px; height: 96px;
     border-radius: 50%;
     z-index: 2;
     pointer-events: none;
     mix-blend-mode: screen;
-    background: radial-gradient(circle, rgba(255, 200, 80, 0.28) 0%, rgba(255, 120, 20, 0.14) 42%, transparent 70%);
-    filter: blur(10px);
+    background: radial-gradient(circle, rgba(255, 210, 90, 0.32) 0%, rgba(255, 120, 20, 0.14) 45%, transparent 72%);
+    filter: blur(12px);
     animation: emberBreath 3.6s ease-in-out infinite;
 }
 @keyframes emberBreath {
-    0%, 100% { opacity: 0.45; }
-    50%      { opacity: 0.8; }
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.85; }
 }
 
 .upload-call {
@@ -1972,16 +1985,15 @@ LANDING_CSS = """
     -webkit-text-fill-color: transparent;
 }
 
-/* Minimal real heat rim — thin warm border + soft glow, no cartoon flames */
 [data-testid="stFileUploader"] {
     position: relative;
     z-index: 5;
-    margin-top: 28px;
+    margin-top: 18px;
+    max-width: 560px;
     border: 1px solid rgba(255, 150, 60, 0.55) !important;
     border-radius: 16px !important;
     padding: 20px 18px !important;
-    background: rgba(12, 8, 20, 0.82) !important;
-    backdrop-filter: blur(6px);
+    background: #050505 !important;
     box-shadow:
         0 0 0 1px rgba(255, 210, 120, 0.08) inset,
         0 0 22px rgba(255, 110, 20, 0.22),
@@ -2020,7 +2032,12 @@ LANDING_CSS = """
 
 @media (max-width: 900px) {
     .goku-hero, .palm-glow { display: none; }
-    .block-container { padding-left: 1rem !important; padding-top: 1.2rem !important; }
+    .block-container {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        padding-top: 1.2rem !important;
+    }
+    [data-testid="stFileUploader"] { max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
     .palm-glow, [data-testid="stFileUploader"] { animation: none !important; }
@@ -2395,8 +2412,3 @@ if all_sources:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     save_persisted_state()
-else:
-    st.info(
-        "Upload one or more files to start. Multi-sheet Excel files show Keep/Ignore per sheet. "
-        "Loaded progress stays until you click 'Remove Loaded Files'."
-    )
