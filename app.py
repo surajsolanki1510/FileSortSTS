@@ -1907,14 +1907,16 @@ def load_hero_image_b64() -> str:
 LANDING_CSS = """
 <style>
 :root {
-    --gw: min(78vh, 44vw);
-    --shift: 150px;
-    --hand-x: calc(var(--gw) * 0.95);
-    --hand-y: calc(28vh + var(--shift));
+    /* New asset is landscape (~1.5:1); size by height, hands sit ~72% x / 48% y */
+    --gh: min(92vh, 78vw);
+    --gw: calc(var(--gh) * 1.5);
+    --shift: 4vh;
+    --hand-x: calc(var(--gw) * 0.74);
+    --hand-y: calc(var(--shift) + var(--gh) * 0.48);
 }
 .block-container {
-    padding-left: calc(var(--gw) + 2rem) !important;
-    padding-top: max(1rem, calc(28vh - 170px)) !important;
+    padding-left: min(calc(var(--hand-x) + 1.2rem), 46vw) !important;
+    padding-top: max(0.4rem, calc(var(--hand-y) - 290px)) !important;
     max-width: none !important;
 }
 .hero { display: none; }
@@ -1931,36 +1933,31 @@ LANDING_CSS = """
 .goku-hero {
     position: fixed;
     left: 0; top: var(--shift);
-    height: 100vh;
+    height: var(--gh);
     width: var(--gw);
     object-fit: contain;
-    object-position: left top;
+    object-position: left center;
     z-index: 1;
     pointer-events: none;
-    filter: drop-shadow(0 0 22px rgba(255, 138, 0, 0.55)) drop-shadow(0 0 60px rgba(255, 61, 0, 0.35));
-    animation: gokuAura 2.4s ease-in-out infinite alternate;
-}
-@keyframes gokuAura {
-    from { filter: drop-shadow(0 0 16px rgba(255, 138, 0, 0.45)) drop-shadow(0 0 46px rgba(255, 61, 0, 0.25)); }
-    to   { filter: drop-shadow(0 0 30px rgba(255, 214, 10, 0.75)) drop-shadow(0 0 80px rgba(255, 61, 0, 0.50)); }
+    filter: drop-shadow(0 0 18px rgba(255, 150, 40, 0.35));
 }
 
 .palm-glow {
     position: fixed;
-    left: calc(var(--hand-x) - 110px);
-    top: calc(var(--hand-y) - 110px);
-    width: 220px; height: 220px;
+    left: calc(var(--hand-x) - 70px);
+    top: calc(var(--hand-y) - 70px);
+    width: 140px; height: 140px;
     border-radius: 50%;
     z-index: 2;
     pointer-events: none;
     mix-blend-mode: screen;
-    background: radial-gradient(circle, rgba(255, 214, 10, 0.55) 0%, rgba(255, 138, 0, 0.35) 30%, rgba(255, 61, 0, 0.15) 55%, transparent 70%);
-    filter: blur(8px);
-    animation: emberBreath 2.4s ease-in-out infinite;
+    background: radial-gradient(circle, rgba(255, 200, 80, 0.28) 0%, rgba(255, 120, 20, 0.14) 42%, transparent 70%);
+    filter: blur(10px);
+    animation: emberBreath 3.6s ease-in-out infinite;
 }
 @keyframes emberBreath {
-    0%, 100% { opacity: 0.55; transform: scale(0.92); }
-    50%      { opacity: 1;    transform: scale(1.06); }
+    0%, 100% { opacity: 0.45; }
+    50%      { opacity: 0.8; }
 }
 
 .upload-call {
@@ -1973,119 +1970,60 @@ LANDING_CSS = """
     background-clip: text;
     color: transparent;
     -webkit-text-fill-color: transparent;
-    animation: heatFlicker 1.8s ease-in-out infinite;
 }
 
-@property --blaze-angle {
-    syntax: "<angle>";
-    initial-value: 0deg;
-    inherits: false;
-}
+/* Minimal real heat rim — thin warm border + soft glow, no cartoon flames */
 [data-testid="stFileUploader"] {
     position: relative;
     z-index: 5;
-    margin-top: 46px;
-    border: none !important;
-    padding: 22px 20px !important;
-    background: linear-gradient(160deg, rgba(30, 12, 22, 0.88), rgba(12, 7, 22, 0.90)) !important;
+    margin-top: 28px;
+    border: 1px solid rgba(255, 150, 60, 0.55) !important;
+    border-radius: 16px !important;
+    padding: 20px 18px !important;
+    background: rgba(12, 8, 20, 0.82) !important;
     backdrop-filter: blur(6px);
-    animation: heatOrbit 4s linear infinite;
-    transition: transform 0.35s ease;
+    box-shadow:
+        0 0 0 1px rgba(255, 210, 120, 0.08) inset,
+        0 0 22px rgba(255, 110, 20, 0.22),
+        0 0 48px rgba(255, 70, 0, 0.10);
+    animation: heatPulse 3.8s ease-in-out infinite;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
-[data-testid="stFileUploader"]:hover { transform: translateY(-2px); }
-[data-testid="stFileUploaderDropzone"] { position: static !important; }
-
-/* Rotating molten edge */
-[data-testid="stFileUploader"]::before {
-    content: "";
-    position: absolute;
-    inset: -2px;
-    padding: 2px;
-    border-radius: 20px;
-    background: conic-gradient(from var(--blaze-angle), var(--fire-deep), var(--fire-mid), #fff3b0, var(--fire-hot), var(--fire-deep), var(--ember), var(--fire-deep));
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    animation: blazeSpin 4s linear infinite;
-    pointer-events: none;
+[data-testid="stFileUploader"]:hover {
+    border-color: rgba(255, 180, 80, 0.75) !important;
+    box-shadow:
+        0 0 0 1px rgba(255, 220, 140, 0.12) inset,
+        0 0 28px rgba(255, 130, 30, 0.32),
+        0 0 60px rgba(255, 80, 0, 0.14);
 }
-
-/* Flame tongues rising from the top edge, drifting along the border */
-[data-testid="stFileUploaderDropzone"]::before {
-    content: "";
-    position: absolute;
-    left: 10px; right: 10px;
-    top: -44px;
-    height: 48px;
-    pointer-events: none;
-    background:
-        radial-gradient(ellipse 11px 26px at 50% 100%, #fff3b0 0%, var(--fire-hot) 25%, var(--fire-mid) 50%, transparent 72%),
-        radial-gradient(ellipse 15px 38px at 50% 100%, var(--fire-hot) 0%, var(--fire-mid) 35%, var(--fire-deep) 60%, transparent 75%);
-    background-size: 30px 100%, 52px 100%;
-    background-repeat: repeat-x;
-    background-position: 0 100%, 14px 100%;
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-    filter: blur(2.5px);
-    transform-origin: bottom;
-    animation: flameDrift 3s linear infinite, flameDance 1.1s ease-in-out infinite alternate;
-    transition: height 0.35s ease, top 0.35s ease, filter 0.35s ease;
-}
-
-/* Low embers glowing under the bottom edge */
+[data-testid="stFileUploader"]::before,
+[data-testid="stFileUploader"]::after,
+[data-testid="stFileUploaderDropzone"]::before,
 [data-testid="stFileUploaderDropzone"]::after {
-    content: "";
-    position: absolute;
-    left: 16px; right: 16px;
-    bottom: -16px;
-    height: 22px;
-    pointer-events: none;
-    background:
-        radial-gradient(ellipse 12px 14px at 50% 0%, var(--fire-hot) 0%, var(--fire-mid) 40%, transparent 72%);
-    background-size: 40px 100%;
-    background-repeat: repeat-x;
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
-    filter: blur(3px);
-    opacity: 0.75;
-    animation: flameDriftBack 4s linear infinite;
+    content: none !important;
+    display: none !important;
 }
-
-[data-testid="stFileUploader"]:hover [data-testid="stFileUploaderDropzone"]::before {
-    top: -66px;
-    height: 70px;
-    filter: blur(2px) brightness(1.25);
-}
-[data-testid="stFileUploader"]:hover { animation-duration: 2s; }
-[data-testid="stFileUploader"]:hover button {
-    box-shadow: 0 0 30px rgba(255, 190, 0, 0.95), 0 0 60px rgba(255, 61, 0, 0.55) !important;
-}
-
-@keyframes blazeSpin { to { --blaze-angle: 360deg; } }
-@keyframes heatOrbit {
-    0%   { box-shadow: 0 0 40px rgba(255, 61, 0, 0.18) inset, -10px -6px 34px rgba(255, 61, 0, 0.75), 10px 6px 34px rgba(255, 214, 10, 0.55), 0 0 90px rgba(255, 138, 0, 0.30); }
-    25%  { box-shadow: 0 0 40px rgba(255, 61, 0, 0.18) inset, 10px -6px 38px rgba(255, 61, 0, 0.85), -10px 6px 30px rgba(255, 214, 10, 0.50), 0 0 110px rgba(255, 138, 0, 0.40); }
-    50%  { box-shadow: 0 0 40px rgba(255, 61, 0, 0.18) inset, 10px 6px 34px rgba(255, 61, 0, 0.75), -10px -6px 34px rgba(255, 214, 10, 0.55), 0 0 90px rgba(255, 138, 0, 0.30); }
-    75%  { box-shadow: 0 0 40px rgba(255, 61, 0, 0.18) inset, -10px 6px 38px rgba(255, 61, 0, 0.85), 10px -6px 30px rgba(255, 214, 10, 0.50), 0 0 110px rgba(255, 138, 0, 0.40); }
-    100% { box-shadow: 0 0 40px rgba(255, 61, 0, 0.18) inset, -10px -6px 34px rgba(255, 61, 0, 0.75), 10px 6px 34px rgba(255, 214, 10, 0.55), 0 0 90px rgba(255, 138, 0, 0.30); }
-}
-@keyframes flameDrift { to { background-position: 30px 100%, 66px 100%; } }
-@keyframes flameDriftBack { to { background-position: -40px 0; } }
-@keyframes flameDance {
-    0%   { transform: scaleY(0.82); opacity: 0.85; }
-    50%  { transform: scaleY(1.05); opacity: 1; }
-    100% { transform: scaleY(0.92); opacity: 0.9; }
+@keyframes heatPulse {
+    0%, 100% {
+        box-shadow:
+            0 0 0 1px rgba(255, 210, 120, 0.06) inset,
+            0 0 18px rgba(255, 110, 20, 0.16),
+            0 0 40px rgba(255, 70, 0, 0.07);
+    }
+    50% {
+        box-shadow:
+            0 0 0 1px rgba(255, 210, 120, 0.12) inset,
+            0 0 26px rgba(255, 130, 30, 0.28),
+            0 0 54px rgba(255, 80, 0, 0.12);
+    }
 }
 
 @media (max-width: 900px) {
     .goku-hero, .palm-glow { display: none; }
-    .block-container { padding-left: 1rem !important; }
+    .block-container { padding-left: 1rem !important; padding-top: 1.2rem !important; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .goku-hero, .palm-glow, .upload-call,
-    [data-testid="stFileUploader"], [data-testid="stFileUploader"]::before,
-    [data-testid="stFileUploaderDropzone"]::before,
-    [data-testid="stFileUploaderDropzone"]::after { animation: none !important; }
+    .palm-glow, [data-testid="stFileUploader"] { animation: none !important; }
 }
 </style>
 """
