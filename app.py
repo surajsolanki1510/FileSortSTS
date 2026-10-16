@@ -1906,29 +1906,30 @@ def load_hero_image_b64() -> str:
 
 LANDING_CSS = """
 <style>
-/* Pure black canvas on landing — keep ember / fire-floor particles */
+/* Reference home: black stage, left hero, right upload stack */
 .stApp {
     background: #000000 !important;
 }
 .stApp::before {
-    opacity: 0.35;
-    background: radial-gradient(ellipse 70% 50% at 18% 70%, rgba(255, 90, 0, 0.22), transparent 65%) !important;
-    filter: blur(40px);
+    opacity: 0.55;
+    background:
+        radial-gradient(ellipse 55% 45% at 22% 78%, rgba(255, 90, 0, 0.28), transparent 70%),
+        radial-gradient(ellipse 40% 30% at 78% 88%, rgba(255, 60, 0, 0.16), transparent 70%) !important;
+    filter: blur(36px);
     animation: none !important;
 }
-.stApp::after { opacity: 0.18; }
+.stApp::after { opacity: 0.12; }
 
 :root {
-    /* Bottom-left, taller than half screen; cover-crop keeps hands at the right edge */
-    --gh: 78vh;
-    --gw: min(48vw, calc(var(--gh) * 1.15));
-    --hand-x: var(--gw);
-    --hand-y: calc(100vh - var(--gh) * 0.38);
+    --gw: 50vw;
+    --gh: 100vh;
+    --hand-x: calc(var(--gw) * 0.92);
+    --hand-y: 52vh;
 }
 .block-container {
-    padding-left: calc(var(--gw) + 1.6rem) !important;
-    padding-right: 2rem !important;
-    padding-top: max(4vh, calc(var(--hand-y) - 280px)) !important;
+    padding-left: calc(var(--gw) + 1.2rem) !important;
+    padding-right: clamp(1.2rem, 4vw, 3.5rem) !important;
+    padding-top: 18vh !important;
     max-width: none !important;
 }
 .hero { display: none; }
@@ -1939,6 +1940,7 @@ LANDING_CSS = """
     text-transform: uppercase;
     color: var(--neon);
     text-shadow: 0 0 14px rgba(0, 229, 255, 0.75);
+    margin-bottom: 0.35rem;
 }
 .landing-brand b { color: var(--fire-hot); text-shadow: 0 0 14px rgba(255, 214, 10, 0.7); }
 
@@ -1946,88 +1948,130 @@ LANDING_CSS = """
     position: fixed;
     left: 0;
     bottom: 0;
+    top: 0;
     height: var(--gh);
     width: var(--gw);
     object-fit: cover;
-    object-position: left bottom;
+    object-position: 8% 42%;
     z-index: 1;
     pointer-events: none;
-    filter: drop-shadow(0 0 22px rgba(255, 160, 40, 0.45)) drop-shadow(0 0 55px rgba(255, 90, 0, 0.28));
+    filter:
+        drop-shadow(0 0 18px rgba(255, 200, 60, 0.55))
+        drop-shadow(0 0 48px rgba(255, 120, 0, 0.35))
+        contrast(1.05) saturate(1.08);
 }
 
 .palm-glow {
     position: fixed;
-    left: calc(var(--hand-x) - 36px);
-    top: calc(var(--hand-y) - 48px);
-    width: 96px; height: 96px;
+    left: calc(var(--hand-x) - 50px);
+    top: calc(var(--hand-y) - 50px);
+    width: 110px; height: 110px;
     border-radius: 50%;
     z-index: 2;
     pointer-events: none;
     mix-blend-mode: screen;
-    background: radial-gradient(circle, rgba(255, 210, 90, 0.32) 0%, rgba(255, 120, 20, 0.14) 45%, transparent 72%);
-    filter: blur(12px);
-    animation: emberBreath 3.6s ease-in-out infinite;
+    background: radial-gradient(circle, rgba(255, 220, 100, 0.40) 0%, rgba(255, 130, 20, 0.18) 45%, transparent 72%);
+    filter: blur(14px);
+    animation: emberBreath 3.2s ease-in-out infinite;
 }
 @keyframes emberBreath {
-    0%, 100% { opacity: 0.4; }
-    50%      { opacity: 0.85; }
+    0%, 100% { opacity: 0.45; }
+    50%      { opacity: 0.9; }
 }
 
 .upload-call {
     font-family: 'Bebas Neue', 'Orbitron', sans-serif;
-    font-size: clamp(2rem, 4vw, 3.4rem);
+    font-size: clamp(2.4rem, 5vw, 3.8rem);
     letter-spacing: 0.08em;
-    margin: 4px 0 10px;
+    margin: 2px 0 14px;
     background: linear-gradient(180deg, #fff8d6 0%, var(--fire-hot) 35%, var(--fire-mid) 60%, var(--fire-deep) 90%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
     -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 18px rgba(255, 120, 0, 0.35));
 }
 
 [data-testid="stFileUploader"] {
     position: relative;
     z-index: 5;
-    margin-top: 18px;
-    max-width: 560px;
-    border: 1px solid rgba(255, 150, 60, 0.55) !important;
-    border-radius: 16px !important;
-    padding: 20px 18px !important;
-    background: #050505 !important;
+    margin-top: 8px;
+    max-width: 620px;
+    border: 1.5px solid rgba(255, 150, 50, 0.65) !important;
+    border-radius: 18px !important;
+    padding: 22px 20px !important;
+    background: #0a0c14 !important;
+    overflow: visible !important;
     box-shadow:
-        0 0 0 1px rgba(255, 210, 120, 0.08) inset,
-        0 0 22px rgba(255, 110, 20, 0.22),
-        0 0 48px rgba(255, 70, 0, 0.10);
-    animation: heatPulse 3.8s ease-in-out infinite;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        0 0 0 1px rgba(255, 210, 120, 0.10) inset,
+        0 0 28px rgba(255, 110, 20, 0.28),
+        0 0 64px rgba(255, 70, 0, 0.14);
+    animation: heatPulse 3.6s ease-in-out infinite;
 }
 [data-testid="stFileUploader"]:hover {
-    border-color: rgba(255, 180, 80, 0.75) !important;
-    box-shadow:
-        0 0 0 1px rgba(255, 220, 140, 0.12) inset,
-        0 0 28px rgba(255, 130, 30, 0.32),
-        0 0 60px rgba(255, 80, 0, 0.14);
+    border-color: rgba(255, 190, 80, 0.85) !important;
 }
-[data-testid="stFileUploader"]::before,
-[data-testid="stFileUploader"]::after,
+[data-testid="stFileUploader"]::before {
+    content: "" !important;
+    display: block !important;
+    position: absolute;
+    left: 6%; right: 6%;
+    top: -36px;
+    height: 42px;
+    pointer-events: none;
+    z-index: 6;
+    background:
+        radial-gradient(ellipse 12px 28px at 8% 100%, #fff3b0 0%, #ffd60a 28%, #ff8a00 55%, transparent 72%),
+        radial-gradient(ellipse 16px 36px at 22% 100%, #ffd60a 0%, #ff8a00 40%, #ff3d00 65%, transparent 75%),
+        radial-gradient(ellipse 11px 26px at 38% 100%, #fff3b0 0%, #ff8a00 45%, transparent 72%),
+        radial-gradient(ellipse 18px 40px at 54% 100%, #ffd60a 0%, #ff8a00 38%, #ff3d00 62%, transparent 75%),
+        radial-gradient(ellipse 13px 30px at 70% 100%, #fff3b0 0%, #ff8a00 48%, transparent 72%),
+        radial-gradient(ellipse 17px 38px at 86% 100%, #ffd60a 0%, #ff8a00 40%, #ff3d00 65%, transparent 75%);
+    filter: blur(2.5px);
+    transform-origin: bottom center;
+    animation: flameLick 0.55s ease-in-out infinite alternate;
+}
+[data-testid="stFileUploader"]::after {
+    content: none !important;
+    display: none !important;
+}
 [data-testid="stFileUploaderDropzone"]::before,
 [data-testid="stFileUploaderDropzone"]::after {
     content: none !important;
     display: none !important;
 }
+@keyframes flameLick {
+    0%   { transform: scaleY(0.82) skewX(-3deg); opacity: 0.85; }
+    100% { transform: scaleY(1.12) skewX(3deg);  opacity: 1; }
+}
 @keyframes heatPulse {
     0%, 100% {
         box-shadow:
-            0 0 0 1px rgba(255, 210, 120, 0.06) inset,
-            0 0 18px rgba(255, 110, 20, 0.16),
-            0 0 40px rgba(255, 70, 0, 0.07);
+            0 0 0 1px rgba(255, 210, 120, 0.08) inset,
+            0 0 22px rgba(255, 110, 20, 0.22),
+            0 0 50px rgba(255, 70, 0, 0.10);
     }
     50% {
         box-shadow:
-            0 0 0 1px rgba(255, 210, 120, 0.12) inset,
-            0 0 26px rgba(255, 130, 30, 0.28),
-            0 0 54px rgba(255, 80, 0, 0.12);
+            0 0 0 1px rgba(255, 210, 120, 0.14) inset,
+            0 0 32px rgba(255, 140, 30, 0.36),
+            0 0 70px rgba(255, 80, 0, 0.16);
     }
+}
+
+.landing-tip {
+    margin-top: 18px;
+    max-width: 620px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background: linear-gradient(100deg, rgba(16, 22, 40, 0.96), rgba(8, 10, 18, 0.96));
+    border: 1px solid rgba(255, 140, 40, 0.35);
+    border-left: 5px solid #ff8a00;
+    box-shadow: 0 0 24px rgba(255, 100, 0, 0.12);
+    color: #efe6ff;
+    font-size: 0.98rem;
+    line-height: 1.45;
+    font-family: 'Rajdhani', 'Segoe UI', sans-serif;
 }
 
 @media (max-width: 900px) {
@@ -2037,10 +2081,12 @@ LANDING_CSS = """
         padding-right: 1rem !important;
         padding-top: 1.2rem !important;
     }
-    [data-testid="stFileUploader"] { max-width: none; }
+    [data-testid="stFileUploader"], .landing-tip { max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .palm-glow, [data-testid="stFileUploader"] { animation: none !important; }
+    .palm-glow, [data-testid="stFileUploader"], [data-testid="stFileUploader"]::before {
+        animation: none !important;
+    }
 }
 </style>
 """
@@ -2070,7 +2116,8 @@ if "loaded_files" not in st.session_state:
     st.session_state["loaded_files"] = {}
 
 upload_key = f"source_upload_{st.session_state['upload_widget_nonce']}"
-if not st.session_state.get("loaded_files") and not st.session_state.get(upload_key):
+show_landing = not st.session_state.get("loaded_files") and not st.session_state.get(upload_key)
+if show_landing:
     render_landing_scene()
 uploaded_files = st.file_uploader(
     "Upload CSV/XLSX/XLS (multiple files allowed)",
@@ -2078,6 +2125,14 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True,
     key=upload_key,
 )
+if show_landing and not uploaded_files:
+    st.markdown(
+        '<div class="landing-tip">'
+        "Upload one or more files to start. Multi-sheet Excel files show Keep/Ignore per sheet. "
+        "Loaded progress stays until you click 'Remove Loaded Files'."
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 if uploaded_files:
     batch_files = []
