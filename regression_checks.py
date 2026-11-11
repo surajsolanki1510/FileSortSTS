@@ -5,6 +5,7 @@ from app import (
     clean_blood_group,
     clean_dob,
     clean_phone,
+    detect_month_first,
     merge_name_fields,
 )
 
@@ -18,6 +19,10 @@ def run():
     check(clean_dob("11/06/1989"), ("11-06-1989", None), "DOB dd-mm parsing")
     check(clean_dob("5/15/1991"), ("15-05-1991", None), "DOB obvious mm-dd conversion")
     check(clean_dob("13-13-2005")[1], "red", "DOB invalid month/day detection")
+    check(detect_month_first(["09-04-1978", "02-17-1983", "12-18-1988"]), True, "MM-DD column detected")
+    check(detect_month_first(["09-12-1998", "26-05-2003"]), False, "DD-MM column detected")
+    check(detect_month_first(["02-06-1976", "05-08-1990"]), False, "Ambiguous column stays DD-MM")
+    check(clean_dob("09-04-1978", month_first=True), ("04-09-1978", None), "MM-DD column ambiguous date")
     check(
         calculate_age_from_dob("11-06-1989", date(2026, 7, 7)),
         "37",

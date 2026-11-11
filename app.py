@@ -838,11 +838,11 @@ def format_dob_output(dt: pd.Timestamp) -> str:
     return dt.strftime("%d-%m-%Y")
 
 
-def resolve_numeric_date_parts(raw: str) -> Optional[Tuple[int, int, int]]:
+def resolve_numeric_date_parts(raw: str, month_first: bool = False) -> Optional[Tuple[int, int, int]]:
     """
     Decide (day, month, year) from a numeric date string, without checking that
     the calendar date actually exists.
-    - Default numeric day/month input to DD-MM-YYYY.
+    - Default numeric day/month input to DD-MM-YYYY (MM-DD-YYYY when month_first).
     - If second part is clearly a day (>12), treat input as MM-DD-YYYY.
     - YYYY-MM-DD (ISO) is also supported when first part is clearly a year.
     """
@@ -855,8 +855,8 @@ def resolve_numeric_date_parts(raw: str) -> Optional[Tuple[int, int, int]]:
 
     if p1 > 31:
         year, month, day = p1, p2, p3
-    elif p2 > 12:
-        # Obvious MM-DD-YYYY input (e.g. 5/15/1991) -> convert to DD-MM-YYYY.
+    elif p2 > 12 or (month_first and p1 <= 12):
+        # MM-DD-YYYY input (e.g. 5/15/1991) -> convert to DD-MM-YYYY.
         month, day, year = p1, p2, p3
     else:
         day, month, year = p1, p2, p3
@@ -867,9 +867,27 @@ def resolve_numeric_date_parts(raw: str) -> Optional[Tuple[int, int, int]]:
     return day, month, year
 
 
-def parse_numeric_date(raw: str) -> Optional[pd.Timestamp]:
+def detect_month_first(values) -> bool:
+    """
+    True when a date column is consistently MM-DD: some values only make sense
+    month-first (second part > 12) and none only make sense day-first.
+    """
+    month_first_hits = 0
+    for raw in values:
+        match = re.match(r"^\s*(\d{1,2})[-/.](\d{1,2})[-/.]\d{2,4}\s*$", str(raw))
+        if not match:
+            continue
+        p1, p2 = int(match.group(1)), int(match.group(2))
+        if p1 > 12:
+            return False
+        if p2 > 12:
+            month_first_hits += 1
+    return month_first_hits > 0
+
+
+def parse_numeric_date(raw: str, month_first: bool = False) -> Optional[pd.Timestamp]:
     """Parse numeric date parts into a timestamp (NaT if the date is impossible)."""
-    parts = resolve_numeric_date_parts(raw)
+    parts = resolve_numeric_date_parts(raw, month_first)
     if parts is None:
         return None
     day, month, year = parts
@@ -879,7 +897,7 @@ def parse_numeric_date(raw: str) -> Optional[pd.Timestamp]:
         return pd.NaT
 
 
-def clean_dob(raw: str) -> Tuple[str, Optional[str]]:
+def clean_dob(raw: str, month_first: bool = False) -> Tuple[str, Optional[str]]:
     if is_blank(raw):
         return "", None
 
@@ -893,14 +911,14 @@ def clean_dob(raw: str) -> Tuple[str, Optional[str]]:
         serial = float(ordinal_fixed)
         dt = pd.to_datetime(serial, origin="1899-12-30", unit="D", errors="coerce")
     else:
-        dt = parse_numeric_date(ordinal_fixed)
+        dt = parse_numeric_date(ordinal_fixed, month_first)
         if dt is None:
             dt = pd.to_datetime(ordinal_fixed, dayfirst=True, errors="coerce")
 
     if pd.isna(dt):
         # Impossible calendar date: still reorder to DD-MM-YYYY so an obvious
         # MM-DD-YYYY input (e.g. 2-30-2025) is shown as 30-02-2025, flagged red.
-        parts = resolve_numeric_date_parts(ordinal_fixed)
+        parts = resolve_numeric_date_parts(ordinal_fixed, month_first)
         if parts is not None:
             day, month, year = parts
             return f"{day:02d}-{month:02d}-{year:04d}", "red"
@@ -1382,6 +1400,9 @@ def merge_cleaned_frames(
     offset = 0
     for cleaned_df, cell_flags, file_name, sheet_name in parts:
         part = cleaned_df.copy()
+        part = part.rename(
+            columns={c: f"{c} (original)" for c in ("Source File", "Source Sheet") if c in part.columns}
+        )
         part["Source File"] = file_name
         part["Source Sheet"] = sheet_name or ""
         frames.append(part)
@@ -1523,13 +1544,17 @@ def apply_cleaning(
     dob_primary = mapping.get("dob")
     dob_cols = find_dob_source_columns(out, dob_primary)
     if dob_cols:
+        raw_dobs = [first_non_blank_value(out.iloc[i], dob_cols) for i in range(len(out))]
+        month_first = detect_month_first(raw_dobs)
         dob_values = []
         age_values = []
-        for i in range(len(out)):
-            raw = first_non_blank_value(out.iloc[i], dob_cols)
-            cleaned, flag = clean_dob(raw)
+        for i, raw in enumerate(raw_dobs):
+            cleaned, flag = clean_dob(raw, month_first)
+            age = calculate_age_from_dob(cleaned, age_as_on)
+            if not flag and age.isdigit() and int(age) < 3:
+                flag = "red"
             dob_values.append(cleaned)
-            age_values.append(calculate_age_from_dob(cleaned, age_as_on))
+            age_values.append(age)
             if is_blank(raw):
                 mark_empty(i, "Date of Birth")
             mark_cell(i, "Date of Birth", flag)
