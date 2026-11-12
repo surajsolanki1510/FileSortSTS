@@ -1,4 +1,6 @@
 import base64
+import codecs
+import csv
 import hashlib
 import io
 import re
@@ -205,6 +207,48 @@ h1, h2, h3, h4 {
 .stTabs [data-baseweb="tab"][aria-selected="true"] p { color: var(--text); }
 .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { display: none; }
 .stTabs [data-baseweb="tab-panel"] { padding-top: 18px; animation: fadeUp 0.4s ease both; }
+
+/* Nested tabs (Map values): segmented switch, no step numbers. */
+.stTabs .stTabs [data-baseweb="tab-list"] {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+}
+.stTabs .stTabs [data-baseweb="tab"] {
+    padding: 8px 22px !important;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+}
+.stTabs .stTabs [data-baseweb="tab"]::before { display: none; }
+.stTabs .stTabs [data-baseweb="tab"] p { font-size: 0.95rem; }
+.stTabs .stTabs [data-baseweb="tab"][aria-selected="true"] {
+    background: linear-gradient(135deg, rgba(255, 122, 26, 0.22), rgba(255, 179, 71, 0.10));
+    box-shadow: inset 0 0 0 1px rgba(255, 122, 26, 0.5);
+}
+.stTabs .stTabs [data-baseweb="tab-panel"] {
+    margin-top: 14px;
+    padding: 18px 20px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.val-summary { color: var(--muted); font-size: 0.92rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.val-summary b { color: var(--text); }
+.val-renamed {
+    margin-left: 10px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+.val-renamed.on { background: rgba(255, 122, 26, 0.16); color: var(--accent-2); }
 
 
 /* ---------- Buttons ---------- */
@@ -907,6 +951,10 @@ def clean_dob(raw: str, month_first: bool = False) -> Tuple[str, Optional[str]]:
     value = value.strip("'\"")
 
     ordinal_fixed = re.sub(r"(\d+)(st|nd|rd|th)", r"\1", value, flags=re.IGNORECASE)
+    # "1990-06-02 00:00:00" (datetime exported as text) must stay year-month-day.
+    ordinal_fixed = re.sub(
+        r"^(\d{4}-\d{1,2}-\d{1,2})[ T]\d{1,2}:\d{2}(:\d{2}(\.\d+)?)?$", r"\1", ordinal_fixed
+    )
 
     # Handle pure numeric Excel serial date.
     if re.fullmatch(r"\d{5}(\.\d+)?", ordinal_fixed):
@@ -1049,14 +1097,6 @@ def find_dob_source_columns(df: pd.DataFrame, primary: Optional[str]) -> List[st
         cols.remove(primary)
         return [primary] + cols
     return [primary]
-
-
-def first_non_blank_value(row: pd.Series, columns: List[str]) -> str:
-    for col in columns:
-        value = row[col]
-        if not is_blank(value):
-            return value
-    return ""
 
 
 def parse_dob_for_excel(value: str) -> Optional[datetime]:
@@ -1225,25 +1265,65 @@ PERSON_COLUMN_HINTS = (
 )
 
 
-def worksheet_to_dataframe(worksheet) -> pd.DataFrame:
-    headers: Optional[List[str]] = None
-    data: List[List[str]] = []
-    for row in worksheet.iter_rows():
-        cells = [cell_to_text(cell) for cell in row]
-        if headers is None:
-            headers = cells
-        else:
-            data.append(cells)
+HEADER_SCAN_ROWS = 15
+# Formatting can extend a sheet to a million empty rows; stop after this many in a row.
+MAX_TRAILING_EMPTY_ROWS = 1000
 
-    if not headers:
+
+def header_hint_hits(row: List[str]) -> int:
+    cells = [normalize_header(v) for v in row if str(v).strip()]
+    return sum(1 for c in cells if any(h == c or h in c for h in PERSON_COLUMN_HINTS))
+
+
+def detect_header_row(rows: List[List[str]]) -> int:
+    """Index of the header row: the first row, unless a later row is clearly the header
+    (e.g. a report title or banner sits above the real column names)."""
+    first_hits = header_hint_hits(rows[0])
+    best_idx, best_hits = 0, first_hits
+    for idx, row in enumerate(rows[1:HEADER_SCAN_ROWS], start=1):
+        hits = header_hint_hits(row)
+        if hits >= 2 and hits > best_hits:
+            best_idx, best_hits = idx, hits
+    return best_idx
+
+
+def rows_to_dataframe(rows: List[List[str]]) -> pd.DataFrame:
+    rows = [["" if v is None else str(v) for v in row] for row in rows]
+    rows = [row for row in rows if any(v.strip() for v in row)]
+    if not rows:
         return pd.DataFrame()
 
-    columns = dedupe_headers(headers)
-    normalized = [
-        (values + [""] * (len(columns) - len(values)))[: len(columns)]
-        for values in data
+    header_idx = detect_header_row(rows)
+    headers, data = rows[header_idx], rows[header_idx + 1 :]
+    width = max([len(headers)] + [len(r) for r in data])
+    headers = headers + [""] * (width - len(headers))
+    data = [(r + [""] * (width - len(r)))[:width] for r in data]
+
+    used = [
+        i for i in range(width)
+        if headers[i].strip() or any(r[i].strip() for r in data)
     ]
-    return pd.DataFrame(normalized, columns=columns).fillna("")
+    headers = [headers[i] for i in used]
+    data = [[r[i] for i in used] for r in data]
+    return pd.DataFrame(data, columns=dedupe_headers(headers)).fillna("")
+
+
+def worksheet_to_dataframe(worksheet) -> pd.DataFrame:
+    # Some exporters write a wrong sheet size; without this, read-only mode truncates rows.
+    if hasattr(worksheet, "reset_dimensions"):
+        worksheet.reset_dimensions()
+    rows: List[List[str]] = []
+    empty_run = 0
+    for row in worksheet.iter_rows():
+        cells = [cell_to_text(cell) for cell in row]
+        if any(v.strip() for v in cells):
+            empty_run = 0
+            rows.append(cells)
+        else:
+            empty_run += 1
+            if empty_run > MAX_TRAILING_EMPTY_ROWS:
+                break
+    return rows_to_dataframe(rows)
 
 
 def read_xlsx_all_sheets(file_bytes: bytes) -> Dict[str, pd.DataFrame]:
@@ -1253,6 +1333,62 @@ def read_xlsx_all_sheets(file_bytes: bytes) -> Dict[str, pd.DataFrame]:
         sheets[sheet_name] = worksheet_to_dataframe(workbook[sheet_name])
     workbook.close()
     return sheets
+
+
+def decode_text_bytes(file_bytes: bytes) -> str:
+    if file_bytes.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return file_bytes.decode("utf-16")
+    for encoding in ("utf-8-sig", "cp1252"):
+        try:
+            return file_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return file_bytes.decode("latin-1")
+
+
+def read_delimited_text(file_bytes: bytes) -> pd.DataFrame:
+    text = decode_text_bytes(file_bytes)
+    sample = "\n".join(text.splitlines()[:50])
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+    except csv.Error:
+        dialect = csv.excel
+    csv.field_size_limit(10 * 1024 * 1024)
+    return rows_to_dataframe(list(csv.reader(io.StringIO(text), dialect)))
+
+
+def legacy_cell_to_text(value) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    if isinstance(value, (datetime, date)):
+        return f"{value.day:02d}-{value.month:02d}-{value.year:04d}"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def read_legacy_xls_sheets(file_bytes: bytes) -> Dict[str, pd.DataFrame]:
+    excel = pd.ExcelFile(io.BytesIO(file_bytes), engine="xlrd")
+    sheets: Dict[str, pd.DataFrame] = {}
+    for sheet_name in excel.sheet_names:
+        raw = pd.read_excel(excel, sheet_name=sheet_name, header=None)
+        rows = [[legacy_cell_to_text(v) for v in row] for row in raw.itertuples(index=False)]
+        sheets[sheet_name] = rows_to_dataframe(rows)
+    return sheets
+
+
+def read_html_table(file_bytes: bytes) -> pd.DataFrame:
+    tables = pd.read_html(io.StringIO(decode_text_bytes(file_bytes)), header=None)
+    biggest = max(tables, key=len)
+    rows = biggest.astype(object).where(biggest.notna(), "").astype(str).values.tolist()
+    # <th> cells become the column labels even with header=None; put them back as a row.
+    if not isinstance(biggest.columns, pd.RangeIndex):
+        header = [
+            " ".join(str(p) for p in col if not str(p).startswith("Unnamed")) if isinstance(col, tuple) else str(col)
+            for col in biggest.columns
+        ]
+        rows = [header] + rows
+    return rows_to_dataframe(rows)
 
 
 def read_xlsx_with_display_dates(file_bytes: bytes) -> pd.DataFrame:
@@ -1313,45 +1449,41 @@ def make_source_entry(
 
 @st.cache_data(show_spinner=False)
 def discover_file_sources(file_bytes: bytes, filename: str) -> List[Dict[str, object]]:
-    """Return one source entry per CSV file or Excel sheet."""
-    lower = filename.lower()
+    """Return one source entry per CSV file or Excel sheet.
+
+    The format is detected from the file contents, not the extension: portals often
+    export HTML or CSV text with an .xls name, or real xlsx with an .xls name.
+    """
     sources: List[Dict[str, object]] = []
     file_id = hashlib.md5(file_bytes).hexdigest()
+    head = file_bytes[:2048].lstrip().lower()
 
-    if lower.endswith(".csv"):
-        uploaded_file = io.BytesIO(file_bytes)
-        df = pd.read_csv(uploaded_file, dtype=str, keep_default_na=False).fillna("")
-        sources.append(make_source_entry(file_id, filename, "", df, True))
-        return sources
+    if not file_bytes.strip():
+        raise ValueError("The file is empty.")
 
-    if lower.endswith(".xlsx"):
-        sheets = read_xlsx_all_sheets(file_bytes)
-        for sheet_name, df in sheets.items():
-            keep = not looks_like_summary_sheet(sheet_name, df)
-            sources.append(make_source_entry(file_id, filename, sheet_name, df, keep))
-        return sources
+    try:
+        if file_bytes.startswith(b"PK"):
+            sheets = read_xlsx_all_sheets(file_bytes)
+        elif file_bytes.startswith(b"\xd0\xcf\x11\xe0"):
+            sheets = read_legacy_xls_sheets(file_bytes)
+        elif b"<table" in file_bytes[:200000].lower() or head.startswith((b"<html", b"<!doctype")):
+            sheets = {"": read_html_table(file_bytes)}
+        else:
+            sheets = {"": read_delimited_text(file_bytes)}
+    except Exception as exc:
+        raise ValueError(
+            f"this file could not be opened. It may be corrupted or password-protected ({exc})."
+        ) from exc
 
-    if lower.endswith(".xls"):
-        uploaded_file = io.BytesIO(file_bytes)
-        try:
-            excel = pd.ExcelFile(uploaded_file)
-            for sheet_name in excel.sheet_names:
-                df = pd.read_excel(excel, sheet_name=sheet_name, dtype=str).fillna("")
-                keep = not looks_like_summary_sheet(sheet_name, df)
-                sources.append(make_source_entry(file_id, filename, sheet_name, df, keep))
-            return sources
-        except Exception:
-            uploaded_file.seek(0)
-            html = uploaded_file.read().decode("utf-8", errors="replace")
-            df = pd.read_html(io.StringIO(html), header=0)[0]
-            if len(df) > 0 and str(df.iloc[0, 0]).strip().lower() in {"first name", "name"}:
-                df.columns = df.iloc[0]
-                df = df.iloc[1:].reset_index(drop=True)
-            df = df.astype(str).fillna("")
-            sources.append(make_source_entry(file_id, filename, "", df, True))
-            return sources
+    for sheet_name, df in sheets.items():
+        if df.empty and len(df.columns) == 0:
+            continue
+        keep = True if not sheet_name else not looks_like_summary_sheet(sheet_name, df)
+        sources.append(make_source_entry(file_id, filename, sheet_name, df, keep))
 
-    raise ValueError("Unsupported file format")
+    if not sources:
+        raise ValueError("No data found in this file.")
+    return sources
 
 
 @st.cache_data(show_spinner=False)
@@ -1500,10 +1632,11 @@ def apply_cleaning(
         cleaned_last = []
         cleaned_full = []
 
-        for i in range(len(out)):
-            full_raw = out.at[i, full_name_col] if full_name_col else ""
-            first_raw = out.at[i, first_name_col] if first_name_col else ""
-            last_raw = out.at[i, last_name_col] if last_name_col else ""
+        blanks = [""] * len(out)
+        full_vals = out[full_name_col].tolist() if full_name_col else blanks
+        first_vals = out[first_name_col].tolist() if first_name_col else blanks
+        last_vals = out[last_name_col].tolist() if last_name_col else blanks
+        for i, (full_raw, first_raw, last_raw) in enumerate(zip(full_vals, first_vals, last_vals)):
             first, last, full = merge_name_fields(full_raw, first_raw, last_raw)
             cleaned_first.append(first)
             cleaned_last.append(last)
@@ -1538,8 +1671,7 @@ def apply_cleaning(
         src_col = mapping.get(field_key)
         if src_col:
             cleaned_values = []
-            for i in range(len(out)):
-                raw = out.at[i, src_col]
+            for i, raw in enumerate(out[src_col].tolist()):
                 cleaned, flag = cleaner(raw)
                 cleaned_values.append(cleaned)
                 if is_blank(raw):
@@ -1551,7 +1683,10 @@ def apply_cleaning(
     dob_primary = mapping.get("dob")
     dob_cols = find_dob_source_columns(out, dob_primary)
     if dob_cols:
-        raw_dobs = [first_non_blank_value(out.iloc[i], dob_cols) for i in range(len(out))]
+        dob_columns = [out[c].tolist() for c in dob_cols]
+        raw_dobs = [
+            next((v for v in values if not is_blank(v)), "") for values in zip(*dob_columns)
+        ]
         month_first = detect_month_first(raw_dobs)
         dob_values = []
         age_values = []
@@ -1572,8 +1707,8 @@ def apply_cleaning(
     emergency_name_col = mapping.get("emergency_name")
     if emergency_name_col:
         em_first, em_last, em_full = [], [], []
-        for i in range(len(out)):
-            first, last, full = split_name(out.at[i, emergency_name_col])
+        for i, raw in enumerate(out[emergency_name_col].tolist()):
+            first, last, full = split_name(raw)
             em_first.append(first)
             em_last.append(last)
             em_full.append(full)
@@ -1587,8 +1722,7 @@ def apply_cleaning(
     cat_col = mapping.get("category")
     if cat_col:
         category_values = []
-        for i in range(len(out)):
-            raw = out.at[i, cat_col]
+        for raw in out[cat_col].tolist():
             if is_blank(raw):
                 category_values.append(".")
                 continue
@@ -1601,8 +1735,7 @@ def apply_cleaning(
     tshirt_col = mapping.get("tshirt_size")
     if tshirt_col:
         tshirt_values = []
-        for i in range(len(out)):
-            raw = out.at[i, tshirt_col]
+        for raw in out[tshirt_col].tolist():
             if is_blank(raw):
                 tshirt_values.append(".")
                 continue
@@ -1615,8 +1748,8 @@ def apply_cleaning(
     country_col = mapping.get("country")
     if country_col:
         values = []
-        for i in range(len(out)):
-            cleaned, flag = clean_country(out.at[i, country_col])
+        for i, raw in enumerate(out[country_col].tolist()):
+            cleaned, flag = clean_country(raw)
             values.append(cleaned)
             mark_cell(i, "Country", flag)
         out["Country"] = values
@@ -1672,12 +1805,12 @@ def sort_cleaned_df(
     drop_cols = [c for c in ["_orig_idx", "_gender_order"] if c in sorted_df.columns]
     sorted_df = sorted_df.drop(columns=drop_cols).reset_index(drop=True)
 
-    new_flags: Dict[Tuple[int, str], str] = {}
-    for new_idx, orig_idx in enumerate(orig_indices):
-        for col_name in df.columns:
-            key = (orig_idx, col_name)
-            if key in cell_flags:
-                new_flags[(new_idx, col_name)] = cell_flags[key]
+    new_position = {orig_idx: new_idx for new_idx, orig_idx in enumerate(orig_indices)}
+    new_flags: Dict[Tuple[int, str], str] = {
+        (new_position[row_idx], col_name): flag
+        for (row_idx, col_name), flag in cell_flags.items()
+        if row_idx in new_position
+    }
     return sorted_df, new_flags
 
 
@@ -1709,9 +1842,8 @@ def df_to_excel_with_highlight(df: pd.DataFrame, cell_flags: Dict[Tuple[int, str
 
         # Write valid DOB values as real Excel dates for proper sorting.
         if dob_col_idx:
-            for row_idx in range(len(df)):
+            for row_idx, raw_val in enumerate(df["Date of Birth"].tolist()):
                 excel_row = row_idx + 2
-                raw_val = df.iloc[row_idx]["Date of Birth"]
                 parsed = parse_dob_for_excel(raw_val)
                 if parsed:
                     cell = ws.cell(row=excel_row, column=dob_col_idx)
@@ -1725,9 +1857,9 @@ def df_to_excel_with_highlight(df: pd.DataFrame, cell_flags: Dict[Tuple[int, str
         ]:
             if not col_idx or col_name not in df.columns:
                 continue
-            for row_idx in range(len(df)):
+            for row_idx, value in enumerate(df[col_name].tolist()):
                 excel_row = row_idx + 2
-                raw_val = clean_spaces(df.iloc[row_idx][col_name])
+                raw_val = clean_spaces(value)
                 if re.fullmatch(r"\d{10}", raw_val):
                     cell = ws.cell(row=excel_row, column=col_idx)
                     cell.value = int(raw_val)
@@ -1735,9 +1867,9 @@ def df_to_excel_with_highlight(df: pd.DataFrame, cell_flags: Dict[Tuple[int, str
 
         # Write age as numeric cells to avoid Excel text warnings.
         if age_col_idx and "Age" in df.columns:
-            for row_idx in range(len(df)):
+            for row_idx, value in enumerate(df["Age"].tolist()):
                 excel_row = row_idx + 2
-                raw_val = clean_spaces(df.iloc[row_idx]["Age"])
+                raw_val = clean_spaces(value)
                 if re.fullmatch(r"\d+", raw_val):
                     cell = ws.cell(row=excel_row, column=age_col_idx)
                     cell.value = int(raw_val)
@@ -1873,7 +2005,6 @@ def build_value_breakdown(
 
 
 def render_value_map_editor(
-    title: str,
     breakdown: pd.DataFrame,
     state_map_key: str,
     editor_key: str,
@@ -1883,7 +2014,6 @@ def render_value_map_editor(
         st.session_state[state_map_key] = {}
 
     saved_map: Dict[str, str] = dict(st.session_state[state_map_key])
-    st.markdown(f"**{title}**")
     if breakdown.empty:
         return saved_map
 
@@ -1903,11 +2033,44 @@ def render_value_map_editor(
                 value=saved_map.get(raw, raw),
                 key=widget_key,
             )
-            new_map[raw] = clean_spaces(mapped) or "."
+            mapped = clean_spaces(mapped) or "."
+            # The same raw value can appear in several sheets; a rename in any of them wins.
+            if mapped != raw or raw not in new_map:
+                new_map[raw] = mapped
     if len(breakdown) > max_rows:
         st.warning(f"Showing first {max_rows} values only ({len(breakdown)} total).")
     st.session_state[state_map_key] = new_map
     return new_map
+
+
+def render_value_section(
+    breakdown: pd.DataFrame,
+    state_map_key: str,
+    editor_key: str,
+    empty_message: str,
+) -> Dict[str, str]:
+    if breakdown.empty:
+        st.info(empty_message)
+        return {}
+
+    head_left, head_right = st.columns([5, 1], vertical_alignment="center")
+    summary_slot = head_left.empty()
+    if head_right.button("Reset", key=f"reset_{editor_key}", use_container_width=True):
+        st.session_state[state_map_key] = {}
+        for key in list(st.session_state.keys()):
+            if isinstance(key, str) and key.startswith(f"{editor_key}::"):
+                st.session_state.pop(key, None)
+        st.rerun()
+
+    value_map = render_value_map_editor(breakdown, state_map_key, editor_key)
+    renamed = sum(1 for raw, mapped in value_map.items() if mapped != raw)
+    summary_slot.markdown(
+        f'<div class="val-summary"><b>{breakdown["Raw Value"].nunique()}</b> values across '
+        f'<b>{breakdown["Source"].nunique()}</b> sheets'
+        f'<span class="val-renamed{" on" if renamed else ""}">{renamed} renamed</span></div>',
+        unsafe_allow_html=True,
+    )
+    return value_map
 
 
 @st.cache_resource
@@ -2209,7 +2372,13 @@ if uploaded_files:
     batch_id = hashlib.md5(
         "|".join(sorted(f["file_id"] for f in batch_files)).encode("utf-8")
     ).hexdigest()
-    if st.session_state.get("loaded_batch_id") != batch_id:
+    if st.session_state.get("loaded_batch_id") == batch_id and not st.session_state.get("loaded_files"):
+        # Same files re-uploaded after a refresh: keep restored mappings, reload the data.
+        st.session_state["loaded_files"] = {
+            f["file_id"]: {"file_name": f["file_name"], "file_bytes": f["file_bytes"]}
+            for f in batch_files
+        }
+    elif st.session_state.get("loaded_batch_id") != batch_id:
         # Reset maps/keep flags for the new batch, but do not remount the uploader
         # (that would wipe the just-selected files).
         for key in [
@@ -2417,75 +2586,67 @@ if all_sources:
         )
 
     with tab_values:
-        st.caption("Rename values so every sheet matches, e.g. HM → Half Marathon.")
         category_map: Dict[str, str] = {}
         tshirt_map: Dict[str, str] = {}
+        sub_cat, sub_tshirt = st.tabs(["🏃  Categories", "👕  T-shirt sizes"], key="values_step")
 
-        try:
-            cat_breakdown = build_value_breakdown(kept_sources, source_mappings, "category")
-            if cat_breakdown.empty:
-                st.info("Map a Category column in step 2 to edit category values.")
-            else:
-                category_map = render_value_map_editor(
-                    "Categories",
-                    cat_breakdown,
+        with sub_cat:
+            try:
+                category_map = render_value_section(
+                    build_value_breakdown(kept_sources, source_mappings, "category"),
                     "category_value_map",
                     "category_value_editor",
+                    "Map a Category column in step 2 to edit category values.",
                 )
-                if st.button("Reset categories", key="reset_category_maps"):
-                    st.session_state["category_value_map"] = {}
-                    for key in list(st.session_state.keys()):
-                        if isinstance(key, str) and key.startswith("category_value_editor::"):
-                            st.session_state.pop(key, None)
-                    st.rerun()
-        except Exception as exc:
-            st.error(f"Category mapping failed: {exc}")
+            except Exception as exc:
+                st.error(f"Category mapping failed: {exc}")
 
-        try:
-            tshirt_breakdown = build_value_breakdown(kept_sources, source_mappings, "tshirt_size")
-            if tshirt_breakdown.empty:
-                st.info("Map a T-Shirt column in step 2 to edit T-shirt values.")
-            else:
-                tshirt_map = render_value_map_editor(
-                    "T-shirt sizes",
-                    tshirt_breakdown,
+        with sub_tshirt:
+            try:
+                tshirt_map = render_value_section(
+                    build_value_breakdown(kept_sources, source_mappings, "tshirt_size"),
                     "tshirt_value_map",
                     "tshirt_value_editor",
+                    "Map a T-Shirt column in step 2 to edit T-shirt values.",
                 )
-                if st.button("Reset T-shirt sizes", key="reset_tshirt_maps"):
-                    st.session_state["tshirt_value_map"] = {}
-                    for key in list(st.session_state.keys()):
-                        if isinstance(key, str) and key.startswith("tshirt_value_editor::"):
-                            st.session_state.pop(key, None)
-                    st.rerun()
-        except Exception as exc:
-            st.error(f"T-Shirt mapping failed: {exc}")
+            except Exception as exc:
+                st.error(f"T-Shirt mapping failed: {exc}")
 
     with tab_clean:
         if st.button("Run cleaning", type="primary", use_container_width=True):
             parts: List[Tuple[pd.DataFrame, Dict[Tuple[int, str], str], str, str]] = []
             progress = st.progress(0.0, text="Starting…")
-            for idx, source in enumerate(kept_sources):
-                sid = str(source["source_id"])
-                progress.progress(idx / len(kept_sources), text=f"Cleaning {source_label(source)}…")
-                cleaned_df, cell_flags = apply_cleaning(
-                    source["df"],  # type: ignore[arg-type]
-                    source_mappings[sid],
-                    category_map,
-                    tshirt_map,
-                    age_as_on,
-                )
-                parts.append(
-                    (
-                        cleaned_df,
-                        cell_flags,
-                        str(source["file_name"]),
-                        str(source.get("sheet_name") or ""),
+            stage = "starting"
+            try:
+                for idx, source in enumerate(kept_sources):
+                    sid = str(source["source_id"])
+                    stage = f"cleaning {source_label(source)}"
+                    progress.progress(idx / len(kept_sources), text=f"Cleaning {source_label(source)}…")
+                    cleaned_df, cell_flags = apply_cleaning(
+                        source["df"],  # type: ignore[arg-type]
+                        source_mappings[sid],
+                        category_map,
+                        tshirt_map,
+                        age_as_on,
                     )
-                )
-            progress.progress(0.95, text="Merging sheets…")
-            cleaned_df, cell_flags = merge_cleaned_frames(parts)
-            excel_bytes = df_to_excel_with_highlight(cleaned_df, cell_flags)
+                    parts.append(
+                        (
+                            cleaned_df,
+                            cell_flags,
+                            str(source["file_name"]),
+                            str(source.get("sheet_name") or ""),
+                        )
+                    )
+                stage = "merging sheets"
+                progress.progress(0.95, text="Merging sheets…")
+                cleaned_df, cell_flags = merge_cleaned_frames(parts)
+                stage = "building the Excel file"
+                excel_bytes = df_to_excel_with_highlight(cleaned_df, cell_flags)
+            except Exception as exc:
+                progress.empty()
+                st.error(f"Cleaning stopped while {stage}: {exc}")
+                save_persisted_state()
+                st.stop()
             progress.empty()
 
             error_counts = count_errors_by_type(cell_flags)

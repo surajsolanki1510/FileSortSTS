@@ -23,6 +23,7 @@ def run():
     check(detect_month_first(["09-12-1998", "26-05-2003"]), False, "DD-MM column detected")
     check(detect_month_first(["02-06-1976", "05-08-1990"]), False, "Ambiguous column stays DD-MM")
     check(clean_dob("09-04-1978", month_first=True), ("04-09-1978", None), "MM-DD column ambiguous date")
+    check(clean_dob("1990-06-02 00:00:00"), ("02-06-1990", None), "ISO datetime text keeps year-month-day")
     check(
         calculate_age_from_dob("11-06-1989", date(2026, 7, 7)),
         "37",
