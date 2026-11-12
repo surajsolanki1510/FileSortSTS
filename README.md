@@ -1,13 +1,12 @@
 # FileSort Cleaner (Streamlit)
 
-Python Streamlit app to clean race-registration files with:
+Streamlit app that cleans and merges race-registration files for Sports Timing Solutions.
 
-- Upload CSV/XLSX/XLS
-- Post-scan manual column mapping
-- Manual category mapping
-- Rule-based cleaning
-- Row highlighting (yellow/red)
-- Download cleaned Excel
+- Upload one or more CSV / XLSX / XLS files (multi-sheet Excel supported)
+- Keep or ignore each sheet
+- Map columns per sheet, then rename category and T-shirt values
+- Rule-based cleaning (names, gender, phone, DOB, age, blood group, country)
+- Flagged cells are colour-coded; download one merged Excel file
 
 ## Run locally
 
@@ -16,17 +15,14 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Regression checks (recommended before deploy)
+## Regression checks (run before deploying)
 
 ```bash
 python regression_checks.py
 ```
 
-If this prints `All regression checks passed.`, core cleaning behavior is intact.
+`All regression checks passed.` means the core cleaning behaviour is intact.
 
 ## Deploy on Streamlit Community Cloud
 
-1. Push this folder to GitHub.
-2. Open [https://share.streamlit.io](https://share.streamlit.io).
-3. Choose your repo and deploy `app.py`.
-
+Push to GitHub, then deploy `app.py` from [share.streamlit.io](https://share.streamlit.io).
