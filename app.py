@@ -126,7 +126,7 @@ h1, h2, h3, h4 {
 
 /* ---------- Stat cards (count-up) ---------- */
 @property --n { syntax: '<integer>'; initial-value: 0; inherits: false; }
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 0 0 18px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin: 0 0 18px; }
 .stat {
     position: relative;
     overflow: hidden;
@@ -206,9 +206,6 @@ h1, h2, h3, h4 {
 .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { display: none; }
 .stTabs [data-baseweb="tab-panel"] { padding-top: 18px; animation: fadeUp 0.4s ease both; }
 
-.sec-head { margin: 2px 0 14px; }
-.sec-head h4 { margin: 0 !important; padding: 0 !important; font-size: 1.15rem !important; }
-.sec-head p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }
 
 /* ---------- Buttons ---------- */
 .stButton > button, .stDownloadButton > button {
@@ -352,36 +349,12 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
     background: linear-gradient(90deg, var(--accent), var(--accent-2)) !important;
 }
 
-/* ---------- Source cards (Keep step) ---------- */
-.src-name { font-weight: 600; color: var(--text); font-size: 0.98rem; }
-.src-file { color: var(--muted); font-size: 0.8rem; }
-.src-num { font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem; line-height: 1; color: var(--text); text-align: right; }
-.src-num small { display: block; font-family: 'Inter', sans-serif; font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
-
-.badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 10px;
-    border-radius: 999px;
-    font-size: 0.74rem;
-    font-weight: 600;
-    white-space: nowrap;
-}
-.badge.ok   { background: rgba(61, 220, 151, 0.12); color: var(--good); }
-.badge.warn { background: rgba(255, 179, 71, 0.12); color: var(--warn); }
-.badge.mute { background: var(--surface-3); color: var(--muted); }
-
 /* ---------- Mapping health ---------- */
 .health {
     display: flex;
     align-items: center;
     gap: 14px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 12px 16px;
-    margin: 6px 0 16px;
+    margin: 2px 0 14px;
 }
 .health-bar { flex: 1; height: 6px; border-radius: 6px; background: var(--surface-3); overflow: hidden; }
 .health-bar i {
@@ -394,32 +367,6 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 }
 @keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .health-text { color: var(--text); font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
-
-.map-matrix {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    overflow: hidden;
-    font-size: 0.85rem;
-    margin: 4px 0 16px;
-}
-.map-matrix th {
-    text-align: left;
-    color: var(--muted);
-    font-weight: 600;
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--line);
-    font-size: 0.7rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-}
-.map-matrix td { padding: 9px 12px; border-bottom: 1px solid var(--line); color: var(--text); }
-.map-matrix tr:last-child td { border-bottom: none; }
-.map-matrix .ok { color: var(--good); font-weight: 700; }
-.map-matrix .miss { color: var(--warn); font-weight: 700; }
 
 /* ---------- Value mapping ---------- */
 .val-src {
@@ -448,7 +395,6 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .err-dot { width: 12px; height: 12px; border-radius: 4px; flex: none; }
 .err-name { flex: 1; color: var(--muted); font-size: 0.85rem; font-weight: 600; }
 .err-count { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; line-height: 1; color: var(--text); }
-.err-card.zero { opacity: 0.45; }
 
 /* ---------- Upload transition flash ---------- */
 .ki-flash {
@@ -1486,13 +1432,13 @@ def render_error_legend(error_counts: Optional[Dict[str, int]] = None) -> None:
     cards = []
     for error_type, info in ERROR_LEGEND.items():
         count_html = ""
-        zero = ""
         if error_counts is not None:
             count = int(error_counts.get(error_type, 0))
+            if count == 0:
+                continue
             count_html = f'<span class="err-count">{count}</span>'
-            zero = " zero" if count == 0 else ""
         cards.append(
-            f'<div class="err-card{zero}">'
+            f'<div class="err-card">'
             f'<span class="err-dot" style="background:#{info["hex"]};box-shadow:0 0 12px #{info["hex"]}88"></span>'
             f'<span class="err-name">{info["label"]}</span>{count_html}</div>'
         )
@@ -2078,7 +2024,7 @@ LANDING_CSS = """
 .stApp:has([data-testid="stFileUploader"]:hover) .ki-beam { opacity: 1 !important; height: 5px; }
 .stApp:has([data-testid="stFileUploader"]:hover) .ki-core { opacity: 1 !important; transform: scale(1.3) !important; }
 
-.landing-head, .landing-chips, [data-testid="stFileUploader"] { max-width: 600px; }
+.landing-head, [data-testid="stFileUploader"] { max-width: 600px; }
 .landing-kicker {
     display: flex;
     align-items: center;
@@ -2157,22 +2103,6 @@ LANDING_CSS = """
     color: var(--text) !important;
 }
 
-.landing-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 16px;
-    animation: fadeUp 0.6s ease 0.8s both;
-}
-.landing-chips span {
-    padding: 5px 12px;
-    border-radius: 999px;
-    border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--muted);
-    font-size: 0.78rem;
-    font-weight: 600;
-}
 
 @media (max-width: 900px) {
     .goku-hero, .goku-aura, .ki-core, .ki-beam { display: none; }
@@ -2181,7 +2111,7 @@ LANDING_CSS = """
         padding-right: 1rem !important;
         padding-top: 2rem !important;
     }
-    .landing-head, .landing-chips, [data-testid="stFileUploader"] { max-width: none; }
+    .landing-head, [data-testid="stFileUploader"] { max-width: none; }
 }
 </style>
 """
@@ -2206,39 +2136,21 @@ def render_landing_scene() -> None:
     )
 
 
-def render_landing_chips() -> None:
-    st.markdown(
-        '<div class="landing-chips">'
-        "<span>CSV</span><span>XLSX</span><span>XLS</span>"
-        "<span>Multi-sheet</span><span>Multiple files</span>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-
 WORKSPACE_CSS = """
 <style>
-/* Header + stats render after the uploader; lift them above the file strip. */
-[data-testid="stVerticalBlock"] > div:has(.app-bar) { order: -2; }
-[data-testid="stVerticalBlock"] > div:has(.top-stats) { order: -1; }
-[data-testid="stFileUploader"] { padding: 4px 12px !important; }
-[data-testid="stFileUploader"] [data-testid="stWidgetLabel"] { display: none; }
+/* Loaded files are listed in the header; the uploader stays mounted but hidden. */
+[data-testid="stElementContainer"]:has([data-testid="stFileUploader"]) { display: none; }
 </style>
 """
 
 
-def section_head(title: str, subtitle: str = "") -> None:
-    sub = f"<p>{subtitle}</p>" if subtitle else ""
-    st.markdown(f'<div class="sec-head"><h4>{title}</h4>{sub}</div>', unsafe_allow_html=True)
-
-
-def render_stats(items: List[Tuple[str, int]], extra_class: str = "") -> None:
+def render_stats(items: List[Tuple[str, int]]) -> None:
     cards = "".join(
         f'<div class="stat"><div class="stat-label">{label}</div>'
         f'<div class="stat-num" style="--to:{int(value)}"></div></div>'
         for label, value in items
     )
-    st.markdown(f'<div class="stats {extra_class}">{cards}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="stats">{cards}</div>', unsafe_allow_html=True)
 
 
 def is_source_kept(source: Dict[str, object]) -> bool:
@@ -2251,12 +2163,11 @@ def is_source_kept(source: Dict[str, object]) -> bool:
     )
 
 
-def set_all_keep(sources: List[Dict[str, object]], use_suggestion: bool) -> None:
+def keep_all_sources(sources: List[Dict[str, object]]) -> None:
     for s in sources:
         sid = str(s["source_id"])
-        value = bool(s["default_keep"]) if use_suggestion else True
-        st.session_state["source_keep"][sid] = value
-        st.session_state[f"keep_{sid}"] = value
+        st.session_state["source_keep"][sid] = True
+        st.session_state[f"keep_{sid}"] = True
 
 
 restore_persisted_state()
@@ -2277,8 +2188,6 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True,
     key=upload_key,
 )
-if show_landing and not uploaded_files:
-    render_landing_chips()
 
 if uploaded_files:
     batch_files = []
@@ -2366,19 +2275,16 @@ if all_sources:
         '<div class="app-kicker"><i></i>Sports Timing Solutions</div>'
         '<div class="app-title">FileSort <span>Cleaner</span></div>'
         "</div>"
-        f'<div class="app-files"><b>{len(file_names)}</b> file(s) loaded<br>'
-        f'{", ".join(file_names[:3])}{" …" if len(file_names) > 3 else ""}</div>'
+        f'<div class="app-files">{", ".join(file_names[:3])}{" …" if len(file_names) > 3 else ""}</div>'
         "</div>",
         unsafe_allow_html=True,
     )
     render_stats(
         [
             ("Files", len(file_names)),
-            ("Sheets", len(all_sources)),
-            ("Keeping", len(kept_sources)),
+            ("Sheets kept", len(kept_sources)),
             ("Runners", total_runners),
-        ],
-        extra_class="top-stats",
+        ]
     )
 
     tab_keep, tab_map, tab_values, tab_clean = st.tabs(
@@ -2387,21 +2293,13 @@ if all_sources:
     )
 
     with tab_keep:
-        section_head(
-            "Choose what to clean",
-            "Runner sheets are kept automatically. Summary sheets like Count are switched off.",
-        )
-        q1, q2, q3 = st.columns(3)
+        q1, q2, _ = st.columns([1, 1, 2])
         with q1:
-            if st.button("Use suggestions", use_container_width=True):
-                set_all_keep(all_sources, use_suggestion=True)
+            if st.button("Keep all", use_container_width=True):
+                keep_all_sources(all_sources)
                 st.rerun()
         with q2:
-            if st.button("Keep all", use_container_width=True):
-                set_all_keep(all_sources, use_suggestion=False)
-                st.rerun()
-        with q3:
-            if st.button("Remove files & start over", use_container_width=True):
+            if st.button("Start over", use_container_width=True):
                 clear_loaded_file_state()
                 st.rerun()
 
@@ -2409,31 +2307,15 @@ if all_sources:
             all_sources,
             key=lambda s: (-int(s.get("runner_count", s["rows"])), -int(s["rows"])),
         )
+        multi_file = len(file_names) > 1
         for source in ordered:
             sid = str(source["source_id"])
             runners = int(source.get("runner_count", source["rows"]))
-            sheet = str(source.get("sheet_name") or "Whole file")
-            with st.container(border=True):
-                c1, c2, c3 = st.columns([6, 2, 2], vertical_alignment="center")
-                with c1:
-                    keep = st.toggle(sheet, key=f"keep_{sid}")
-                    st.markdown(
-                        f'<div class="src-file">{source["file_name"]} &middot; '
-                        f'{int(source["rows"])} rows &middot; {len(source["columns"])} columns</div>',  # type: ignore[arg-type]
-                        unsafe_allow_html=True,
-                    )
-                with c2:
-                    badge = (
-                        '<span class="badge ok">Runner sheet</span>'
-                        if source["default_keep"]
-                        else '<span class="badge mute">Looks like summary</span>'
-                    )
-                    st.markdown(badge, unsafe_allow_html=True)
-                with c3:
-                    st.markdown(
-                        f'<div class="src-num">{runners}<small>runners</small></div>',
-                        unsafe_allow_html=True,
-                    )
+            sheet = str(source.get("sheet_name") or source["file_name"])
+            label = f"{sheet} · {source['file_name']}" if multi_file and source.get("sheet_name") else sheet
+            runner_word = "runner" if runners == 1 else "runners"
+            label += f"  —  {runners} {runner_word}" if source["default_keep"] else "  —  summary sheet"
+            keep = st.toggle(label, key=f"keep_{sid}")
             st.session_state["source_keep"][sid] = keep
 
         kept_sources = [s for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)]
@@ -2443,10 +2325,6 @@ if all_sources:
             st.stop()
 
     with tab_map:
-        section_head(
-            "Map columns",
-            "Pick which column holds each field. Work through one sheet at a time.",
-        )
         source_labels = {source_label(s): s for s in kept_sources}
         selected_label = st.selectbox("Working on", list(source_labels.keys()), key="active_map_source_label")
         active_source = source_labels[selected_label]
@@ -2518,44 +2396,13 @@ if all_sources:
         ]
         matched, total = sum(checks), len(checks)
         health_slot.markdown(
-            f'<div class="health"><span class="health-text">{matched} of {total} key fields matched</span>'
-            f'<div class="health-bar"><i style="width:{int(100 * matched / max(total, 1))}%"></i></div>'
-            + (
-                '<span class="badge ok">Ready</span>'
-                if matched == total
-                else '<span class="badge warn">Check missing fields</span>'
-            )
-            + "</div>",
+            f'<div class="health"><span class="health-text">{matched}/{total} key fields matched</span>'
+            f'<div class="health-bar"><i style="width:{int(100 * matched / max(total, 1))}%"></i></div></div>',
             unsafe_allow_html=True,
         )
 
-        with st.expander("Preview this sheet (first 8 rows)", expanded=False):
+        with st.expander("Preview sheet", expanded=False):
             st.dataframe(active_df.head(8), use_container_width=True)
-
-        matrix_fields = [
-            ("Name", ("full_name", "first_name", "last_name")),
-            ("Gender", ("gender",)),
-            ("Phone", ("phone",)),
-            ("DOB", ("dob",)),
-            ("Category", ("category",)),
-            ("T-Shirt", ("tshirt_size",)),
-        ]
-        header = "".join(f"<th>{label}</th>" for label, _ in matrix_fields)
-        body = ""
-        for s in kept_sources:
-            mapping = source_mappings[str(s["source_id"])]
-            cells = "".join(
-                '<td class="ok">&#10003;</td>'
-                if any(mapping.get(f) for f in fields)
-                else '<td class="miss">&#9888;</td>'
-                for _, fields in matrix_fields
-            )
-            body += f"<tr><td>{source_label(s)}</td>{cells}</tr>"
-        st.markdown(
-            '<div class="sec-head"><h4>All sheets</h4><p>&#10003; matched &nbsp;&middot;&nbsp; &#9888; not mapped</p></div>'
-            f'<table class="map-matrix"><tr><th>Sheet</th>{header}</tr>{body}</table>',
-            unsafe_allow_html=True,
-        )
 
         age_as_on = st.date_input(
             "Calculate age as on",
@@ -2565,10 +2412,7 @@ if all_sources:
         )
 
     with tab_values:
-        section_head(
-            "Map category & T-shirt values",
-            "Rename values so every sheet uses the same names (e.g. HM → Half Marathon).",
-        )
+        st.caption("Rename values so every sheet matches, e.g. HM → Half Marathon.")
         category_map: Dict[str, str] = {}
         tshirt_map: Dict[str, str] = {}
 
@@ -2613,12 +2457,6 @@ if all_sources:
             st.error(f"T-Shirt mapping failed: {exc}")
 
     with tab_clean:
-        section_head(
-            "Clean & download",
-            f"{len(kept_sources)} sheet(s) · {total_runners} runners will be cleaned and merged into one Excel file.",
-        )
-        render_error_legend()
-
         if st.button("Run cleaning", type="primary", use_container_width=True):
             parts: List[Tuple[pd.DataFrame, Dict[Tuple[int, str], str], str, str]] = []
             progress = st.progress(0.0, text="Starting…")
@@ -2646,13 +2484,10 @@ if all_sources:
             progress.empty()
 
             error_counts = count_errors_by_type(cell_flags)
-            render_stats(
-                [
-                    ("Rows cleaned", len(cleaned_df)),
-                    ("Sheets merged", len(kept_sources)),
-                    ("Columns", len(cleaned_df.columns)),
-                    ("Flagged cells", sum(error_counts.values())),
-                ]
+            flagged = sum(error_counts.values())
+            st.success(
+                f"{len(cleaned_df)} rows cleaned · "
+                + (f"{flagged} cells flagged" if flagged else "no issues found")
             )
             st.download_button(
                 label="Download cleaned Excel",
@@ -2663,9 +2498,8 @@ if all_sources:
                 use_container_width=True,
                 on_click="ignore",
             )
-            section_head("Issues found", "Flagged cells are coloured the same way in the Excel file.")
-            render_error_legend(error_counts)
-            section_head("Preview", "First 20 rows of the merged output.")
+            if flagged:
+                render_error_legend(error_counts)
             preview_df = cleaned_df.head(20)
             if cell_flags:
                 st.dataframe(style_preview_dataframe(preview_df, cell_flags), use_container_width=True)
