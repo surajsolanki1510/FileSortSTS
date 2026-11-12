@@ -1893,12 +1893,12 @@ def render_value_map_editor(
     view = breakdown.head(max_rows)
     for source, group in view.groupby("Source", sort=True):
         st.markdown(f'<span class="val-src">{source}</span>', unsafe_allow_html=True)
-        grid = st.columns(4)
+        grid = st.columns(6)
         for pos, (_, row) in enumerate(group.iterrows()):
             raw = str(row["Raw Value"])
             rows_n = int(row["Rows"])
             widget_key = f"{editor_key}::{source}::{raw}"
-            mapped = grid[pos % 4].text_input(
+            mapped = grid[pos % 6].text_input(
                 f"{raw} · {rows_n}",
                 value=saved_map.get(raw, raw),
                 key=widget_key,
@@ -2140,6 +2140,11 @@ WORKSPACE_CSS = """
 <style>
 /* Loaded files are listed in the header; the uploader stays mounted but hidden. */
 [data-testid="stElementContainer"]:has([data-testid="stFileUploader"]) { display: none; }
+.block-container {
+    max-width: none !important;
+    padding-left: clamp(1rem, 3vw, 3rem) !important;
+    padding-right: clamp(1rem, 3vw, 3rem) !important;
+}
 </style>
 """
 
@@ -2352,13 +2357,13 @@ if all_sources:
 
         health_slot = st.empty()
 
-        essential_ui = st.columns(2)
+        essential_ui = st.columns(4)
         for idx, field in enumerate(ESSENTIAL_MAPPING_FIELDS):
             key = map_key(active_sid, field)
             current = source_mappings[active_sid].get(field) or active_guess.get(field) or "<None>"
             if current not in active_options:
                 current = "<None>"
-            picked = essential_ui[idx % 2].selectbox(
+            picked = essential_ui[idx % 4].selectbox(
                 FIELD_LABELS[field],
                 options=active_options,
                 index=active_options.index(current),
@@ -2368,13 +2373,13 @@ if all_sources:
 
         with st.expander("More columns (optional)", expanded=False):
             advanced_fields = [f for f in CANONICAL_FIELDS if f not in ESSENTIAL_MAPPING_FIELDS]
-            adv_ui = st.columns(2)
+            adv_ui = st.columns(4)
             for idx, field in enumerate(advanced_fields):
                 key = map_key(active_sid, field)
                 current = source_mappings[active_sid].get(field) or active_guess.get(field) or "<None>"
                 if current not in active_options:
                     current = "<None>"
-                picked = adv_ui[idx % 2].selectbox(
+                picked = adv_ui[idx % 4].selectbox(
                     FIELD_LABELS[field],
                     options=active_options,
                     index=active_options.index(current),
