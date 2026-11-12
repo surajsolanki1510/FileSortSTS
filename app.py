@@ -17,411 +17,467 @@ st.set_page_config(page_title="FileSort Cleaner", layout="wide", page_icon="🔥
 
 THEME_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Orbitron:wght@600;900&family=Rajdhani:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-    --fire-core: #fff3b0;
-    --fire-hot: #ffd60a;
-    --fire-mid: #ff8a00;
-    --fire-deep: #ff3d00;
-    --ember: #ff2e63;
-    --neon: #00e5ff;
-    --void: #05040c;
-    --panel: rgba(18, 14, 32, 0.72);
-    --edge: rgba(255, 138, 0, 0.35);
+    --bg: #000000;
+    --surface: #0c0c10;
+    --surface-2: #14141a;
+    --surface-3: #1d1d26;
+    --line: rgba(255, 255, 255, 0.08);
+    --line-strong: rgba(255, 255, 255, 0.14);
+    --text: #f5f5f7;
+    --muted: #9b9ba8;
+    --accent: #ff7a1a;
+    --accent-2: #ffb347;
+    --accent-soft: rgba(255, 122, 26, 0.14);
+    --good: #3ddc97;
+    --warn: #ffb347;
+    --radius: 16px;
 }
 
-[data-testid="stToolbar"] {display: none !important;}
-[data-testid="stDecoration"] {display: none !important;}
-header {display: none !important;}
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
+[data-testid="stToolbar"], [data-testid="stDecoration"], header { display: none !important; }
+#MainMenu, footer { visibility: hidden; }
 
-/* ---------- Base canvas ---------- */
 .stApp {
     background:
-        radial-gradient(1200px 600px at 12% -10%, rgba(255, 61, 0, 0.20), transparent 60%),
-        radial-gradient(900px 500px at 88% 0%, rgba(0, 229, 255, 0.14), transparent 55%),
-        radial-gradient(800px 700px at 50% 110%, rgba(255, 46, 99, 0.18), transparent 60%),
-        linear-gradient(180deg, #05040c 0%, #0b0716 45%, #120a1e 100%);
-    background-attachment: fixed;
-    color: #f2ecff;
-    font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+        radial-gradient(900px 520px at 0% 0%, rgba(255, 122, 26, 0.09), transparent 60%),
+        var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
+.block-container { position: relative; z-index: 2; padding-top: 1.4rem !important; max-width: 1180px; }
 
-/* Animated aurora haze over the base */
-.stApp::before {
-    content: "";
-    position: fixed;
-    inset: -20%;
-    pointer-events: none;
-    z-index: 0;
-    background:
-        conic-gradient(from 0deg at 30% 40%, rgba(255,61,0,0.10), rgba(0,229,255,0.06), rgba(255,46,99,0.10), rgba(255,61,0,0.10));
-    filter: blur(90px);
-    animation: auroraSpin 24s linear infinite;
-    opacity: 0.85;
-}
-
-/* Scanline / grid texture for the anime tech feel */
-.stApp::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    background-image:
-        linear-gradient(rgba(255, 255, 255, 0.030) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.030) 1px, transparent 1px);
-    background-size: 48px 48px;
-    mask-image: radial-gradient(circle at 50% 30%, black 10%, transparent 78%);
-    -webkit-mask-image: radial-gradient(circle at 50% 30%, black 10%, transparent 78%);
-    opacity: 0.5;
-}
-
-[data-testid="stAppViewContainer"] > .main { position: relative; z-index: 1; }
-.block-container { position: relative; z-index: 2; padding-top: 1.5rem !important; }
-
-@keyframes auroraSpin {
-    from { transform: rotate(0deg) scale(1.05); }
-    to   { transform: rotate(360deg) scale(1.05); }
-}
-
-/* ---------- Ember particle field ---------- */
-.ember-field {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 1;
-    overflow: hidden;
-}
+/* ---------- Embers ---------- */
+.ember-field { position: fixed; inset: 0; pointer-events: none; z-index: 1; overflow: hidden; }
 .ember {
     position: absolute;
-    bottom: -40px;
-    width: 6px;
-    height: 6px;
+    bottom: -20px;
     border-radius: 50%;
-    background: radial-gradient(circle, var(--fire-core) 0%, var(--fire-mid) 45%, rgba(255, 61, 0, 0) 70%);
-    box-shadow: 0 0 12px 3px rgba(255, 138, 0, 0.65);
-    animation: emberRise linear infinite;
+    background: radial-gradient(circle, #fff3d6 0%, var(--accent) 50%, transparent 72%);
+    box-shadow: 0 0 10px 2px rgba(255, 122, 26, 0.45);
     opacity: 0;
+    animation: emberRise linear infinite;
 }
 @keyframes emberRise {
     0%   { transform: translate3d(0, 0, 0) scale(0.6); opacity: 0; }
-    12%  { opacity: 1; }
-    70%  { opacity: 0.85; }
-    100% { transform: translate3d(var(--drift, 40px), -105vh, 0) scale(1.25); opacity: 0; }
-}
-
-/* Base of the screen burning */
-.fire-floor {
-    position: fixed;
-    left: 0; right: 0; bottom: 0;
-    height: 190px;
-    pointer-events: none;
-    z-index: 1;
-    background: linear-gradient(0deg, rgba(255, 61, 0, 0.38) 0%, rgba(255, 138, 0, 0.16) 38%, transparent 100%);
-    filter: blur(22px);
-    animation: firePulse 3.4s ease-in-out infinite alternate;
-}
-@keyframes firePulse {
-    from { opacity: 0.55; transform: scaleY(0.92); }
-    to   { opacity: 1;    transform: scaleY(1.10); }
-}
-
-/* ---------- Hero ---------- */
-.hero {
-    position: relative;
-    padding: 34px 38px 30px;
-    margin-bottom: 26px;
-    border-radius: 22px;
-    background: linear-gradient(135deg, rgba(26, 16, 46, 0.86), rgba(10, 8, 22, 0.92));
-    border: 1px solid var(--edge);
-    box-shadow:
-        0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-        0 24px 70px rgba(255, 61, 0, 0.18),
-        0 0 90px rgba(0, 229, 255, 0.07);
-    overflow: hidden;
-}
-.hero::before {
-    content: "";
-    position: absolute;
-    top: -60%; left: -30%;
-    width: 60%; height: 220%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
-    transform: rotate(18deg);
-    animation: slashSweep 5.5s ease-in-out infinite;
-}
-@keyframes slashSweep {
-    0%, 62%  { left: -40%; }
-    100%     { left: 130%; }
-}
-.hero-kicker {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 0.74rem;
-    letter-spacing: 0.42em;
-    text-transform: uppercase;
-    color: var(--neon);
-    text-shadow: 0 0 14px rgba(0, 229, 255, 0.75);
-    margin-bottom: 6px;
-}
-.hero-title {
-    font-family: 'Bebas Neue', 'Orbitron', sans-serif;
-    font-size: clamp(2.9rem, 7.5vw, 5.4rem);
-    line-height: 0.94;
-    letter-spacing: 0.045em;
-    margin: 0;
-    background: linear-gradient(180deg, #fff8d6 0%, var(--fire-hot) 32%, var(--fire-mid) 58%, var(--fire-deep) 86%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 18px rgba(255, 106, 0, 0.55)) drop-shadow(0 0 44px rgba(255, 46, 99, 0.35));
-    animation: heatFlicker 3.6s ease-in-out infinite;
-}
-@keyframes heatFlicker {
-    0%, 100% { filter: drop-shadow(0 0 18px rgba(255, 106, 0, 0.55)) drop-shadow(0 0 44px rgba(255, 46, 99, 0.32)); }
-    45%      { filter: drop-shadow(0 0 26px rgba(255, 160, 0, 0.85)) drop-shadow(0 0 66px rgba(255, 61, 0, 0.50)); }
-    72%      { filter: drop-shadow(0 0 16px rgba(255, 106, 0, 0.50)) drop-shadow(0 0 38px rgba(255, 46, 99, 0.30)); }
-}
-.hero-sub {
-    margin-top: 12px;
-    font-size: 1.02rem;
-    font-weight: 600;
-    letter-spacing: 0.07em;
-    color: #cdbfe8;
-}
-.hero-sub .step { color: var(--fire-hot); text-shadow: 0 0 10px rgba(255, 214, 10, 0.5); }
-.hero-sub .arrow { color: var(--ember); margin: 0 6px; }
-.hero-rule {
-    margin-top: 18px;
-    height: 3px;
-    border-radius: 3px;
-    background: linear-gradient(90deg, var(--fire-deep), var(--fire-hot), var(--neon), transparent);
-    box-shadow: 0 0 18px rgba(255, 138, 0, 0.7);
-    animation: rulePulse 2.8s ease-in-out infinite alternate;
-}
-@keyframes rulePulse {
-    from { opacity: 0.65; }
-    to   { opacity: 1; }
+    15%  { opacity: 0.7; }
+    80%  { opacity: 0.35; }
+    100% { transform: translate3d(var(--drift, 30px), -100vh, 0) scale(1); opacity: 0; }
 }
 
 /* ---------- Typography ---------- */
+p, label, span, li { color: #d8d8e0; }
 h1, h2, h3, h4 {
-    font-family: 'Orbitron', 'Bebas Neue', sans-serif !important;
-    color: #fff1e0 !important;
-    letter-spacing: 0.03em;
+    font-family: 'Inter', sans-serif !important;
+    color: var(--text) !important;
+    letter-spacing: -0.01em;
+    font-weight: 700 !important;
 }
-[data-testid="stMarkdownContainer"] h3,
-[data-testid="stHeadingWithActionElements"] h3 {
+[data-testid="stCaptionContainer"] p { color: var(--muted) !important; }
+
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* ---------- Workspace header ---------- */
+.app-bar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 4px 0 16px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 18px;
+    animation: fadeUp 0.5s ease both;
+}
+.app-kicker {
+    font-size: 0.7rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.app-kicker i {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+}
+.app-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.6rem;
+    letter-spacing: 0.05em;
+    line-height: 1;
+    color: var(--text);
+    margin-top: 6px;
+}
+.app-title span, .landing-title span {
+    background: linear-gradient(180deg, #fff3d6 0%, var(--accent-2) 45%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.app-files { color: var(--muted); font-size: 0.85rem; text-align: right; }
+.app-files b { color: var(--text); font-weight: 600; }
+
+/* ---------- Stat cards (count-up) ---------- */
+@property --n { syntax: '<integer>'; initial-value: 0; inherits: false; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 0 0 18px; }
+.stat {
     position: relative;
-    padding-left: 16px;
-    text-shadow: 0 0 22px rgba(255, 138, 0, 0.45);
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 18px 12px;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+    animation: fadeUp 0.5s ease both;
 }
-[data-testid="stMarkdownContainer"] h3::before,
-[data-testid="stHeadingWithActionElements"] h3::before {
+.stat:nth-child(2) { animation-delay: 0.06s; }
+.stat:nth-child(3) { animation-delay: 0.12s; }
+.stat:nth-child(4) { animation-delay: 0.18s; }
+.stat:hover { transform: translateY(-2px); border-color: rgba(255, 122, 26, 0.4); }
+.stat::after {
     content: "";
     position: absolute;
-    left: 0; top: 12%;
-    height: 76%;
-    width: 5px;
-    border-radius: 4px;
-    background: linear-gradient(180deg, var(--fire-hot), var(--fire-deep));
-    box-shadow: 0 0 14px rgba(255, 138, 0, 0.9);
+    right: -40px; bottom: -60px;
+    width: 140px; height: 140px;
+    background: radial-gradient(circle, rgba(255, 122, 26, 0.16), transparent 70%);
+    pointer-events: none;
 }
-p, label, span, li { color: #ded4f2; }
+.stat-label { font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.stat-num {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.4rem;
+    line-height: 1.05;
+    color: var(--text);
+    counter-reset: n var(--n);
+    animation: countUp 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.stat-num::after { content: counter(n); }
+@keyframes countUp { from { --n: 0; } to { --n: var(--to); } }
+
+/* ---------- Step tabs ---------- */
+.stTabs [data-baseweb="tab-list"] {
+    counter-reset: step;
+    gap: 8px;
+    padding: 8px 0 12px;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+}
+.stTabs [data-baseweb="tab"] {
+    counter-increment: step;
+    height: auto;
+    padding: 7px 16px 7px 7px !important;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+.stTabs [data-baseweb="tab"]::before {
+    content: counter(step);
+    display: inline-grid;
+    place-items: center;
+    width: 24px; height: 24px;
+    margin-right: 10px;
+    border-radius: 50%;
+    background: var(--surface-3);
+    color: var(--muted);
+    font-weight: 700;
+    font-size: 0.78rem;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+.stTabs [data-baseweb="tab"] p { font-weight: 600; color: var(--muted); font-size: 0.9rem; }
+.stTabs [data-baseweb="tab"]:hover { border-color: var(--line-strong); }
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+    border-color: rgba(255, 122, 26, 0.55);
+    background: linear-gradient(135deg, rgba(255, 122, 26, 0.16), rgba(255, 122, 26, 0.03));
+    box-shadow: 0 0 24px rgba(255, 122, 26, 0.14);
+}
+.stTabs [data-baseweb="tab"][aria-selected="true"]::before {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #1a0a00;
+}
+.stTabs [data-baseweb="tab"][aria-selected="true"] p { color: var(--text); }
+.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] { display: none; }
+.stTabs [data-baseweb="tab-panel"] { padding-top: 18px; animation: fadeUp 0.4s ease both; }
+
+.sec-head { margin: 2px 0 14px; }
+.sec-head h4 { margin: 0 !important; padding: 0 !important; font-size: 1.15rem !important; }
+.sec-head p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }
 
 /* ---------- Buttons ---------- */
 .stButton > button, .stDownloadButton > button {
-    font-family: 'Orbitron', sans-serif !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.10em;
-    text-transform: uppercase;
-    font-size: 0.80rem !important;
-    color: #fff4e2 !important;
-    background: linear-gradient(135deg, rgba(60, 22, 60, 0.92), rgba(24, 14, 38, 0.92)) !important;
-    border: 1px solid rgba(255, 138, 0, 0.55) !important;
-    border-radius: 12px !important;
-    padding: 0.60rem 1.1rem !important;
     position: relative;
     overflow: hidden;
-    transition: transform 0.16s ease, box-shadow 0.22s ease, border-color 0.22s ease;
-    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    color: var(--text) !important;
+    background: var(--surface-2) !important;
+    border: 1px solid var(--line-strong) !important;
+    border-radius: 12px !important;
+    padding: 0.55rem 1.1rem !important;
+    transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .stButton > button:hover, .stDownloadButton > button:hover {
-    transform: translateY(-2px) scale(1.015);
-    border-color: var(--fire-hot) !important;
-    color: #fffdf5 !important;
-    box-shadow: 0 10px 30px rgba(255, 61, 0, 0.40), 0 0 26px rgba(255, 214, 10, 0.35);
+    transform: translateY(-1px);
+    border-color: rgba(255, 122, 26, 0.6) !important;
+    box-shadow: 0 8px 24px rgba(255, 122, 26, 0.12);
 }
 .stButton > button::after, .stDownloadButton > button::after {
     content: "";
     position: absolute;
     top: 0; left: -120%;
-    width: 60%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 226, 150, 0.42), transparent);
-    transform: skewX(-22deg);
-    transition: left 0.55s ease;
+    width: 50%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+    transform: skewX(-20deg);
+    transition: left 0.6s ease;
 }
-.stButton > button:hover::after, .stDownloadButton > button:hover::after { left: 130%; }
-
-/* Primary = full inferno */
+.stButton > button:hover::after, .stDownloadButton > button:hover::after { left: 140%; }
 .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
-    background: linear-gradient(135deg, var(--fire-deep), var(--fire-mid) 55%, var(--fire-hot)) !important;
-    border: 1px solid #ffe08a !important;
-    color: #2a0d00 !important;
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
-    animation: infernoPulse 2.2s ease-in-out infinite;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)) !important;
+    border: none !important;
+    color: #1a0a00 !important;
+    font-weight: 700 !important;
+    box-shadow: 0 8px 28px rgba(255, 122, 26, 0.28);
 }
-@keyframes infernoPulse {
-    0%, 100% { box-shadow: 0 0 22px rgba(255, 94, 0, 0.55), 0 8px 26px rgba(0,0,0,0.45); }
-    50%      { box-shadow: 0 0 44px rgba(255, 160, 0, 0.90), 0 0 76px rgba(255, 61, 0, 0.45), 0 8px 26px rgba(0,0,0,0.45); }
-}
-.stButton > button[kind="primary"]:hover {
-    color: #1c0800 !important;
-    transform: translateY(-2px) scale(1.03);
+.stButton > button[kind="primary"] p, .stDownloadButton > button[kind="primary"] p { color: #1a0a00 !important; }
+.stButton > button[kind="primary"]:hover, .stDownloadButton > button[kind="primary"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 36px rgba(255, 122, 26, 0.42);
 }
 
-/* ---------- Panels: uploader, alerts, expanders, tables ---------- */
+/* ---------- Uploader (workspace: compact file strip) ---------- */
 [data-testid="stFileUploader"] {
-    background: var(--panel);
-    border: 1.5px dashed rgba(255, 138, 0, 0.55);
-    border-radius: 18px;
-    padding: 12px 16px;
-    backdrop-filter: blur(9px);
-    transition: border-color 0.25s ease, box-shadow 0.25s ease;
-    box-shadow: 0 0 34px rgba(255, 61, 0, 0.10) inset;
+    background: var(--surface);
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    transition: border-color 0.2s ease;
 }
-[data-testid="stFileUploader"]:hover {
-    border-color: var(--fire-hot);
-    box-shadow: 0 0 42px rgba(255, 138, 0, 0.28), 0 0 34px rgba(255, 61, 0, 0.12) inset;
-}
+[data-testid="stFileUploader"]:hover { border-color: rgba(255, 122, 26, 0.55); }
 [data-testid="stFileUploaderDropzone"] { background: transparent !important; }
-[data-testid="stFileUploaderDropzoneInstructions"],
 [data-testid="stFileUploaderDropzoneInstructions"] span,
 [data-testid="stFileUploaderDropzoneInstructions"] small,
-[data-testid="stFileUploaderDropzoneInstructions"] div {
-    color: #d9cbf5 !important;
-}
-[data-testid="stFileUploaderDropzoneInstructions"] svg { fill: var(--fire-mid) !important; }
+[data-testid="stFileUploaderDropzoneInstructions"] div { color: var(--muted) !important; }
+[data-testid="stFileUploaderDropzoneInstructions"] svg { fill: var(--accent) !important; }
 [data-testid="stFileUploader"] button {
-    background: linear-gradient(135deg, var(--fire-deep), var(--fire-mid) 60%, var(--fire-hot)) !important;
-    color: #2a0d00 !important;
-    border: 1px solid #ffe08a !important;
-    font-family: 'Orbitron', sans-serif !important;
-    font-weight: 800 !important;
-    letter-spacing: 0.10em;
-    text-transform: uppercase;
-    border-radius: 11px !important;
-    box-shadow: 0 0 22px rgba(255, 122, 0, 0.55);
-}
-[data-testid="stFileUploader"] button:hover {
-    color: #1c0800 !important;
-    box-shadow: 0 0 34px rgba(255, 170, 0, 0.85);
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)) !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    box-shadow: 0 6px 20px rgba(255, 122, 26, 0.3);
 }
 [data-testid="stFileUploader"] button p,
 [data-testid="stFileUploader"] button span,
-[data-testid="stFileUploader"] button div { color: #2a0d00 !important; }
-
-[data-testid="stAlert"] {
-    border-radius: 14px;
-    border-left: 5px solid var(--fire-mid);
-    background: linear-gradient(100deg, rgba(30, 18, 48, 0.90), rgba(14, 10, 26, 0.86)) !important;
-    backdrop-filter: blur(8px);
-    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.42);
-    color: #efe6ff !important;
+[data-testid="stFileUploader"] button div { color: #1a0a00 !important; }
+[data-testid="stFileUploaderFile"] [data-testid="stFileUploaderDeleteBtn"] button {
+    background: transparent !important;
+    box-shadow: none;
 }
-[data-testid="stAlert"] p { color: #efe6ff !important; }
+
+/* ---------- Panels ---------- */
+[data-testid="stAlert"] {
+    border-radius: 12px;
+    background: var(--surface) !important;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    color: var(--text) !important;
+}
+[data-testid="stAlert"] p { color: var(--text) !important; }
 
 [data-testid="stExpander"] {
-    border: 1px solid var(--edge) !important;
+    border: 1px solid var(--line) !important;
     border-radius: 14px !important;
-    background: var(--panel) !important;
-    backdrop-filter: blur(8px);
+    background: var(--surface) !important;
 }
+[data-testid="stVerticalBlockBorderWrapper"], [data-testid="stContainer"] { border-radius: 14px; }
+div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) { border-color: var(--line) !important; }
 
 [data-testid="stDataFrame"], [data-testid="stTable"] {
-    border: 1px solid var(--edge);
+    border: 1px solid var(--line);
     border-radius: 14px;
     overflow: hidden;
-    box-shadow: 0 14px 44px rgba(0, 0, 0, 0.48), 0 0 26px rgba(255, 61, 0, 0.10);
 }
-
-/* Dark grid palette. Flagged cells set their own dark text in the styler. */
 [data-testid="stDataFrame"] {
-    --gdg-bg-cell: #100b20;
-    --gdg-bg-cell-medium: #17102b;
-    --gdg-bg-header: #1f1436;
-    --gdg-bg-header-hovered: #2c1c4b;
-    --gdg-bg-header-has-focus: #33205a;
-    --gdg-text-dark: #f2ecff;
-    --gdg-text-medium: #cbbde8;
-    --gdg-text-light: #9a8cba;
-    --gdg-text-header: #ffcf94;
-    --gdg-text-header-selected: #fff6e6;
-    --gdg-border-color: rgba(255, 138, 0, 0.20);
-    --gdg-horizontal-border-color: rgba(255, 138, 0, 0.12);
-    --gdg-accent-color: var(--fire-mid);
-    --gdg-accent-light: rgba(255, 138, 0, 0.16);
-    --gdg-accent-fg: #2a0d00;
-    --gdg-bg-bubble: #1c1233;
-    --gdg-bg-bubble-selected: #2c1c4b;
-    --gdg-bg-search-result: rgba(255, 214, 10, 0.30);
+    --gdg-bg-cell: #0c0c10;
+    --gdg-bg-cell-medium: #111117;
+    --gdg-bg-header: #14141a;
+    --gdg-bg-header-hovered: #1d1d26;
+    --gdg-bg-header-has-focus: #1d1d26;
+    --gdg-text-dark: #f5f5f7;
+    --gdg-text-medium: #b8b8c4;
+    --gdg-text-light: #8a8a98;
+    --gdg-text-header: #ffcc99;
+    --gdg-text-header-selected: #ffffff;
+    --gdg-border-color: rgba(255, 255, 255, 0.06);
+    --gdg-horizontal-border-color: rgba(255, 255, 255, 0.05);
+    --gdg-accent-color: var(--accent);
+    --gdg-accent-light: rgba(255, 122, 26, 0.14);
+    --gdg-accent-fg: #1a0a00;
+    --gdg-bg-bubble: #14141a;
+    --gdg-bg-bubble-selected: #1d1d26;
+    --gdg-bg-search-result: rgba(255, 179, 71, 0.3);
 }
 
-/* Inputs */
+[data-testid="stMetric"] {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 16px;
+}
+
+/* ---------- Inputs ---------- */
 .stSelectbox div[data-baseweb="select"] > div,
 .stMultiSelect div[data-baseweb="select"] > div,
 .stTextInput input, .stDateInput input {
-    background: rgba(16, 11, 30, 0.88) !important;
-    border: 1px solid rgba(255, 138, 0, 0.32) !important;
-    border-radius: 11px !important;
-    color: #f4ecff !important;
+    background: var(--surface-2) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 10px !important;
+    color: var(--text) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .stSelectbox div[data-baseweb="select"] > div:hover,
-.stMultiSelect div[data-baseweb="select"] > div:hover {
-    border-color: var(--fire-hot) !important;
-    box-shadow: 0 0 18px rgba(255, 138, 0, 0.30);
+.stTextInput input:hover { border-color: var(--line-strong) !important; }
+.stTextInput input:focus, .stDateInput input:focus {
+    border-color: rgba(255, 122, 26, 0.7) !important;
+    box-shadow: 0 0 0 3px rgba(255, 122, 26, 0.15) !important;
 }
-.stMultiSelect span[data-baseweb="tag"] {
-    background: linear-gradient(135deg, var(--fire-deep), var(--fire-mid)) !important;
-    color: #2a0d00 !important;
-    font-weight: 700;
-    border-radius: 8px !important;
+[data-testid="stProgress"] > div > div > div > div {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2)) !important;
 }
 
-/* Legend chips */
-.legend-chip {
-    padding: 13px 8px;
+/* ---------- Source cards (Keep step) ---------- */
+.src-name { font-weight: 600; color: var(--text); font-size: 0.98rem; }
+.src-file { color: var(--muted); font-size: 0.8rem; }
+.src-num { font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem; line-height: 1; color: var(--text); text-align: right; }
+.src-num small { display: block; font-family: 'Inter', sans-serif; font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.badge.ok   { background: rgba(61, 220, 151, 0.12); color: var(--good); }
+.badge.warn { background: rgba(255, 179, 71, 0.12); color: var(--warn); }
+.badge.mute { background: var(--surface-3); color: var(--muted); }
+
+/* ---------- Mapping health ---------- */
+.health {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 16px;
+    margin: 6px 0 16px;
+}
+.health-bar { flex: 1; height: 6px; border-radius: 6px; background: var(--surface-3); overflow: hidden; }
+.health-bar i {
+    display: block;
+    height: 100%;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transform-origin: left;
+    animation: growX 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.health-text { color: var(--text); font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
+
+.map-matrix {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    font-size: 0.85rem;
+    margin: 4px 0 16px;
+}
+.map-matrix th {
+    text-align: left;
+    color: var(--muted);
+    font-weight: 600;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+.map-matrix td { padding: 9px 12px; border-bottom: 1px solid var(--line); color: var(--text); }
+.map-matrix tr:last-child td { border-bottom: none; }
+.map-matrix .ok { color: var(--good); font-weight: 700; }
+.map-matrix .miss { color: var(--warn); font-weight: 700; }
+
+/* ---------- Value mapping ---------- */
+.val-src {
+    display: inline-block;
+    margin: 10px 0 4px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+/* ---------- Error legend / results ---------- */
+.err-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 6px 0 16px; }
+.err-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
     border-radius: 12px;
-    text-align: center;
-    color: #14060a;
-    font-family: 'Orbitron', sans-serif;
-    font-weight: 800;
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    border: 1.5px solid rgba(255, 255, 255, 0.55);
-    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    padding: 10px 14px;
+    animation: fadeUp 0.45s ease both;
 }
-.legend-chip:hover {
-    transform: translateY(-3px) scale(1.03);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), 0 0 26px currentColor;
+.err-dot { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+.err-name { flex: 1; color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+.err-count { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; line-height: 1; color: var(--text); }
+.err-card.zero { opacity: 0.45; }
+
+/* ---------- Upload transition flash ---------- */
+.ki-flash {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    pointer-events: none;
+    background: radial-gradient(circle at 18% 60%, rgba(255, 243, 214, 0.95), rgba(255, 179, 71, 0.5) 25%, rgba(255, 122, 26, 0.15) 50%, transparent 75%);
+    animation: kiFlash 0.9s ease-out forwards;
+}
+@keyframes kiFlash {
+    0%   { opacity: 0; }
+    15%  { opacity: 1; }
+    100% { opacity: 0; visibility: hidden; }
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 11px; height: 11px; }
-::-webkit-scrollbar-track { background: #0a0716; }
-::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, var(--fire-mid), var(--fire-deep));
-    border-radius: 8px;
-    border: 2px solid #0a0716;
-}
-::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, var(--fire-hot), var(--fire-mid)); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #050507; }
+::-webkit-scrollbar-thumb { background: #2a2a34; border-radius: 8px; border: 2px solid #050507; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
+@media (max-width: 900px) {
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .err-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (prefers-reduced-motion: reduce) {
-    .stApp::before, .ember, .fire-floor, .hero::before,
-    .hero-title, .hero-rule, .stButton > button[kind="primary"] { animation: none !important; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .stat-num { --n: var(--to); }
+    .ki-flash { display: none; }
 }
 </style>
 """
@@ -1425,17 +1481,22 @@ def mark_name_issue(cell_flags: Dict[Tuple[int, str], str], row_idx: int, column
         cell_flags[(row_idx, column)] = "name"
 
 
-def render_error_legend():
-    st.markdown("**Error Color Legend**")
-    legend_cols = st.columns(len(ERROR_LEGEND))
-    for col, (_, info) in zip(legend_cols, ERROR_LEGEND.items()):
-        with col:
-            st.markdown(
-                f'<div class="legend-chip" style="background-color:#{info["hex"]}; '
-                f'color:#{info["hex"]};">'
-                f'<span style="color:#14060a;">{info["label"]}</span></div>',
-                unsafe_allow_html=True,
-            )
+def render_error_legend(error_counts: Optional[Dict[str, int]] = None) -> None:
+    """Colour legend; with counts it doubles as the results summary."""
+    cards = []
+    for error_type, info in ERROR_LEGEND.items():
+        count_html = ""
+        zero = ""
+        if error_counts is not None:
+            count = int(error_counts.get(error_type, 0))
+            count_html = f'<span class="err-count">{count}</span>'
+            zero = " zero" if count == 0 else ""
+        cards.append(
+            f'<div class="err-card{zero}">'
+            f'<span class="err-dot" style="background:#{info["hex"]};box-shadow:0 0 12px #{info["hex"]}88"></span>'
+            f'<span class="err-name">{info["label"]}</span>{count_html}</div>'
+        )
+    st.markdown(f'<div class="err-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
 def count_errors_by_type(cell_flags: Dict[Tuple[int, str], str]) -> Dict[str, int]:
@@ -1739,24 +1800,6 @@ def df_to_excel_with_highlight(df: pd.DataFrame, cell_flags: Dict[Tuple[int, str
     return output.read()
 
 
-st.markdown(
-    """
-    <div class="hero">
-        <div class="hero-kicker">Sports Timing Solutions</div>
-        <h1 class="hero-title">FileSort Cleaner</h1>
-        <div class="hero-sub">
-            <span class="step">Upload</span><span class="arrow">&#10148;</span>
-            <span class="step">Keep</span><span class="arrow">&#10148;</span>
-            <span class="step">Map</span><span class="arrow">&#10148;</span>
-            <span class="step">Clean</span><span class="arrow">&#10148;</span>
-            <span class="step">Download</span>
-        </div>
-        <div class="hero-rule"></div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
 @st.cache_resource
 def get_persisted_state_store():
     return {}
@@ -1898,22 +1941,23 @@ def render_value_map_editor(
     if breakdown.empty:
         return saved_map
 
-    st.caption("Sources: " + " | ".join(sorted(breakdown["Source"].astype(str).unique().tolist())))
     new_map: Dict[str, str] = {}
     # Cap widgets for safety on weird files with huge unique sets.
     max_rows = 80
     view = breakdown.head(max_rows)
-    for idx, row in view.iterrows():
-        raw = str(row["Raw Value"])
-        source = str(row["Source"])
-        rows_n = int(row["Rows"])
-        widget_key = f"{editor_key}::{source}::{raw}"
-        mapped = st.text_input(
-            f"{source} | {raw} ({rows_n} rows)",
-            value=saved_map.get(raw, raw),
-            key=widget_key,
-        )
-        new_map[raw] = clean_spaces(mapped) or "."
+    for source, group in view.groupby("Source", sort=True):
+        st.markdown(f'<span class="val-src">{source}</span>', unsafe_allow_html=True)
+        grid = st.columns(4)
+        for pos, (_, row) in enumerate(group.iterrows()):
+            raw = str(row["Raw Value"])
+            rows_n = int(row["Rows"])
+            widget_key = f"{editor_key}::{source}::{raw}"
+            mapped = grid[pos % 4].text_input(
+                f"{raw} · {rows_n}",
+                value=saved_map.get(raw, raw),
+                key=widget_key,
+            )
+            new_map[raw] = clean_spaces(mapped) or "."
     if len(breakdown) > max_rows:
         st.warning(f"Showing first {max_rows} values only ({len(breakdown)} total).")
     st.session_state[state_map_key] = new_map
@@ -1931,190 +1975,217 @@ def load_hero_image_b64() -> str:
 
 LANDING_CSS = """
 <style>
-/* Reference home: black stage, left hero, right upload stack */
 .stApp {
-    background: #000000 !important;
-}
-.stApp::before {
-    opacity: 0.55;
     background:
-        radial-gradient(ellipse 55% 45% at 22% 78%, rgba(255, 90, 0, 0.28), transparent 70%),
-        radial-gradient(ellipse 40% 30% at 78% 88%, rgba(255, 60, 0, 0.16), transparent 70%) !important;
-    filter: blur(36px);
-    animation: none !important;
+        radial-gradient(60vw 60vh at 20% 80%, rgba(255, 110, 20, 0.14), transparent 70%),
+        #000 !important;
 }
-.stApp::after { opacity: 0.12; }
 
 :root {
-    --gw: 50vw;
-    --gh: 100vh;
-    --hand-x: calc(var(--gw) * 0.92);
-    --hand-y: 52vh;
+    /* goku.png is 1532x1024; palms sit at the far right edge, half-way down. */
+    --gw: min(56vw, calc(92vh * 1.496));
+    --gh: calc(var(--gw) / 1.496);
+    --palm-x: calc(var(--gw) * 0.975);
+    --palm-y: calc(100vh - var(--gh) * 0.5);
+    --content-x: calc(var(--gw) + 4.5rem);
 }
 .block-container {
-    padding-left: calc(var(--gw) + 1.2rem) !important;
-    padding-right: clamp(1.2rem, 4vw, 3.5rem) !important;
-    padding-top: 18vh !important;
     max-width: none !important;
+    padding-left: var(--content-x) !important;
+    padding-right: clamp(1.5rem, 5vw, 4rem) !important;
+    padding-top: max(1.5rem, calc(var(--palm-y) - 264px)) !important;
 }
-.hero { display: none; }
-.landing-brand {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 0.78rem;
-    letter-spacing: 0.38em;
-    text-transform: uppercase;
-    color: var(--neon);
-    text-shadow: 0 0 14px rgba(0, 229, 255, 0.75);
-    margin-bottom: 0.35rem;
-}
-.landing-brand b { color: var(--fire-hot); text-shadow: 0 0 14px rgba(255, 214, 10, 0.7); }
+.ember:nth-child(n+7) { display: none; }
 
 .goku-hero {
     position: fixed;
-    left: 0;
-    bottom: 0;
-    top: 0;
-    height: var(--gh);
+    left: 0; bottom: 0;
     width: var(--gw);
-    object-fit: cover;
-    object-position: 8% 42%;
+    height: var(--gh);
     z-index: 1;
     pointer-events: none;
-    filter:
-        drop-shadow(0 0 18px rgba(255, 200, 60, 0.55))
-        drop-shadow(0 0 48px rgba(255, 120, 0, 0.35))
-        contrast(1.05) saturate(1.08);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 9%, #000 76%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 9%, #000 76%, transparent 100%);
+    filter: drop-shadow(0 0 14px rgba(255, 190, 70, 0.35));
+    animation: gokuIn 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes gokuIn {
+    from { opacity: 0; transform: translateX(-70px); filter: brightness(2.2) drop-shadow(0 0 40px rgba(255, 200, 80, 0.9)); }
+    to   { opacity: 1; transform: none; filter: drop-shadow(0 0 14px rgba(255, 190, 70, 0.35)); }
+}
+.goku-aura {
+    position: fixed;
+    left: calc(var(--gw) * 0.05);
+    bottom: 0;
+    width: calc(var(--gw) * 0.8);
+    height: calc(var(--gh) * 1.05);
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(closest-side, rgba(255, 150, 40, 0.30), rgba(255, 90, 0, 0.10) 55%, transparent 75%);
+    filter: blur(30px);
+    animation: auraFlare 1.4s ease-out 0.2s both, auraBreath 4.5s ease-in-out 1.6s infinite;
+}
+@keyframes auraFlare {
+    0%   { opacity: 0; transform: scale(0.6); }
+    45%  { opacity: 1; transform: scale(1.15); }
+    100% { opacity: 0.7; transform: scale(1); }
+}
+@keyframes auraBreath {
+    0%, 100% { opacity: 0.55; transform: scale(1); }
+    50%      { opacity: 0.9;  transform: scale(1.04); }
 }
 
-.palm-glow {
+.ki-core {
     position: fixed;
-    left: calc(var(--hand-x) - 50px);
-    top: calc(var(--hand-y) - 50px);
-    width: 110px; height: 110px;
+    left: calc(var(--palm-x) - 26px);
+    top: calc(var(--palm-y) - 26px);
+    width: 52px; height: 52px;
     border-radius: 50%;
-    z-index: 2;
+    z-index: 3;
     pointer-events: none;
     mix-blend-mode: screen;
-    background: radial-gradient(circle, rgba(255, 220, 100, 0.40) 0%, rgba(255, 130, 20, 0.18) 45%, transparent 72%);
-    filter: blur(14px);
-    animation: emberBreath 3.2s ease-in-out infinite;
+    background: radial-gradient(circle, #fff 0%, #fff3d6 20%, rgba(255, 179, 71, 0.8) 42%, rgba(255, 122, 26, 0.25) 62%, transparent 72%);
+    animation: coreCharge 1s ease-out 0.7s both, coreIdle 2.8s ease-in-out 1.7s infinite;
 }
-@keyframes emberBreath {
-    0%, 100% { opacity: 0.45; }
-    50%      { opacity: 0.9; }
+@keyframes coreCharge {
+    0%   { opacity: 0; transform: scale(0.2); }
+    60%  { opacity: 1; transform: scale(1.6); }
+    100% { opacity: 0.85; transform: scale(1); }
+}
+@keyframes coreIdle {
+    0%, 100% { opacity: 0.55; transform: scale(0.9); }
+    50%      { opacity: 0.95; transform: scale(1.08); }
+}
+.ki-beam {
+    position: fixed;
+    left: var(--palm-x);
+    top: calc(var(--palm-y) - 2px);
+    width: calc(var(--content-x) - var(--palm-x));
+    height: 4px;
+    z-index: 3;
+    pointer-events: none;
+    border-radius: 4px;
+    transform-origin: left center;
+    background: linear-gradient(90deg, #fff 0%, #fff3d6 30%, var(--accent-2) 70%, var(--accent) 100%);
+    box-shadow: 0 0 12px rgba(255, 179, 71, 0.9), 0 0 28px rgba(255, 122, 26, 0.6);
+    animation: beamFire 0.45s cubic-bezier(0.3, 0.9, 0.3, 1) 1.2s both, beamIdle 2.8s ease-in-out 1.7s infinite;
+}
+@keyframes beamFire { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes beamIdle {
+    0%, 100% { opacity: 0.35; }
+    50%      { opacity: 0.8; }
+}
+.stApp:has([data-testid="stFileUploader"]:hover) .ki-beam { opacity: 1 !important; height: 5px; }
+.stApp:has([data-testid="stFileUploader"]:hover) .ki-core { opacity: 1 !important; transform: scale(1.3) !important; }
+
+.landing-head, .landing-chips, [data-testid="stFileUploader"] { max-width: 600px; }
+.landing-kicker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.72rem;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    animation: fadeUp 0.6s ease 0.2s both;
+}
+.landing-kicker i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.landing-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2.4rem, 4.2vw, 4.6rem);
+    letter-spacing: 0.04em;
+    line-height: 0.95;
+    white-space: nowrap;
+    color: var(--text);
+    margin: 10px 0 8px;
+    animation: fadeUp 0.6s ease 0.3s both;
+}
+.landing-sub {
+    color: var(--muted);
+    font-size: 1.02rem;
+    margin: 0 0 22px;
+    animation: fadeUp 0.6s ease 0.4s both;
 }
 
-.upload-call {
-    font-family: 'Bebas Neue', 'Orbitron', sans-serif;
-    font-size: clamp(2.4rem, 5vw, 3.8rem);
-    letter-spacing: 0.08em;
-    margin: 2px 0 14px;
-    background: linear-gradient(180deg, #fff8d6 0%, var(--fire-hot) 35%, var(--fire-mid) 60%, var(--fire-deep) 90%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 18px rgba(255, 120, 0, 0.35));
-}
-
+@property --ring { syntax: '<angle>'; initial-value: 270deg; inherits: false; }
 [data-testid="stFileUploader"] {
     position: relative;
-    z-index: 5;
-    margin-top: 8px;
-    max-width: 620px;
-    border: 1.5px solid rgba(255, 150, 50, 0.65) !important;
-    border-radius: 18px !important;
-    padding: 22px 20px !important;
-    background: #0a0c14 !important;
-    overflow: visible !important;
-    box-shadow:
-        0 0 0 1px rgba(255, 210, 120, 0.10) inset,
-        0 0 28px rgba(255, 110, 20, 0.28),
-        0 0 64px rgba(255, 70, 0, 0.14);
-    animation: heatPulse 3.6s ease-in-out infinite;
+    z-index: 4;
+    background: linear-gradient(160deg, rgba(24, 24, 32, 0.92), rgba(10, 10, 14, 0.94)) !important;
+    border: 1px solid var(--line-strong) !important;
+    border-radius: 20px !important;
+    padding: 24px 24px 20px !important;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s both;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 [data-testid="stFileUploader"]:hover {
-    border-color: rgba(255, 190, 80, 0.85) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 122, 26, 0.16);
 }
 [data-testid="stFileUploader"]::before {
-    content: "" !important;
-    display: block !important;
+    content: "";
     position: absolute;
-    left: 6%; right: 6%;
-    top: -36px;
-    height: 42px;
+    inset: -1px;
+    padding: 1.5px;
+    border-radius: 21px;
     pointer-events: none;
-    z-index: 6;
-    background:
-        radial-gradient(ellipse 12px 28px at 8% 100%, #fff3b0 0%, #ffd60a 28%, #ff8a00 55%, transparent 72%),
-        radial-gradient(ellipse 16px 36px at 22% 100%, #ffd60a 0%, #ff8a00 40%, #ff3d00 65%, transparent 75%),
-        radial-gradient(ellipse 11px 26px at 38% 100%, #fff3b0 0%, #ff8a00 45%, transparent 72%),
-        radial-gradient(ellipse 18px 40px at 54% 100%, #ffd60a 0%, #ff8a00 38%, #ff3d00 62%, transparent 75%),
-        radial-gradient(ellipse 13px 30px at 70% 100%, #fff3b0 0%, #ff8a00 48%, transparent 72%),
-        radial-gradient(ellipse 17px 38px at 86% 100%, #ffd60a 0%, #ff8a00 40%, #ff3d00 65%, transparent 75%);
-    filter: blur(2.5px);
-    transform-origin: bottom center;
-    animation: flameLick 0.55s ease-in-out infinite alternate;
+    background: conic-gradient(from var(--ring), transparent 0deg 290deg, var(--accent) 330deg, #fff3d6 352deg, transparent 360deg);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: ringRun 1.3s cubic-bezier(0.4, 0, 0.2, 1) 1.6s both, ringLoop 7s linear 2.9s infinite;
 }
 [data-testid="stFileUploader"]::after {
-    content: none !important;
-    display: none !important;
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    pointer-events: none;
+    box-shadow: 0 0 0 1px rgba(255, 122, 26, 0.5);
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
-[data-testid="stFileUploaderDropzone"]::before,
-[data-testid="stFileUploaderDropzone"]::after {
-    content: none !important;
-    display: none !important;
-}
-@keyframes flameLick {
-    0%   { transform: scaleY(0.82) skewX(-3deg); opacity: 0.85; }
-    100% { transform: scaleY(1.12) skewX(3deg);  opacity: 1; }
-}
-@keyframes heatPulse {
-    0%, 100% {
-        box-shadow:
-            0 0 0 1px rgba(255, 210, 120, 0.08) inset,
-            0 0 22px rgba(255, 110, 20, 0.22),
-            0 0 50px rgba(255, 70, 0, 0.10);
-    }
-    50% {
-        box-shadow:
-            0 0 0 1px rgba(255, 210, 120, 0.14) inset,
-            0 0 32px rgba(255, 140, 30, 0.36),
-            0 0 70px rgba(255, 80, 0, 0.16);
-    }
+[data-testid="stFileUploader"]:hover::after { opacity: 1; }
+@keyframes ringRun  { from { --ring: 270deg; } to { --ring: 630deg; } }
+@keyframes ringLoop { from { --ring: 270deg; } to { --ring: 630deg; } }
+[data-testid="stFileUploader"] [data-testid="stWidgetLabel"] p {
+    font-size: 1.12rem !important;
+    font-weight: 700 !important;
+    color: var(--text) !important;
 }
 
-.landing-tip {
-    margin-top: 18px;
-    max-width: 620px;
-    padding: 16px 18px;
-    border-radius: 14px;
-    background: linear-gradient(100deg, rgba(16, 22, 40, 0.96), rgba(8, 10, 18, 0.96));
-    border: 1px solid rgba(255, 140, 40, 0.35);
-    border-left: 5px solid #ff8a00;
-    box-shadow: 0 0 24px rgba(255, 100, 0, 0.12);
-    color: #efe6ff;
-    font-size: 0.98rem;
-    line-height: 1.45;
-    font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+.landing-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+    animation: fadeUp 0.6s ease 0.8s both;
+}
+.landing-chips span {
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 600;
 }
 
 @media (max-width: 900px) {
-    .goku-hero, .palm-glow { display: none; }
+    .goku-hero, .goku-aura, .ki-core, .ki-beam { display: none; }
     .block-container {
         padding-left: 1rem !important;
         padding-right: 1rem !important;
-        padding-top: 1.2rem !important;
+        padding-top: 2rem !important;
     }
-    [data-testid="stFileUploader"], .landing-tip { max-width: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-    .palm-glow, [data-testid="stFileUploader"], [data-testid="stFileUploader"]::before {
-        animation: none !important;
-    }
+    .landing-head, .landing-chips, [data-testid="stFileUploader"] { max-width: none; }
 }
 </style>
 """
+
 
 def render_landing_scene() -> None:
     img_b64 = load_hero_image_b64()
@@ -2125,11 +2196,67 @@ def render_landing_scene() -> None:
     )
     st.markdown(LANDING_CSS, unsafe_allow_html=True)
     st.markdown(
-        f'{hero_img}<div class="palm-glow"></div>'
-        '<div class="landing-brand">Sports Timing Solutions &middot; <b>FileSort Cleaner</b></div>'
-        '<div class="upload-call">Upload Your File</div>',
+        f'<div class="goku-aura"></div>{hero_img}<div class="ki-beam"></div><div class="ki-core"></div>'
+        '<div class="landing-head">'
+        '<div class="landing-kicker"><i></i>Sports Timing Solutions &middot; FileSort Cleaner</div>'
+        '<div class="landing-title">Upload your <span>file</span></div>'
+        '<p class="landing-sub">Clean, merge and flag errors in seconds.</p>'
+        "</div>",
         unsafe_allow_html=True,
     )
+
+
+def render_landing_chips() -> None:
+    st.markdown(
+        '<div class="landing-chips">'
+        "<span>CSV</span><span>XLSX</span><span>XLS</span>"
+        "<span>Multi-sheet</span><span>Multiple files</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+WORKSPACE_CSS = """
+<style>
+/* Header + stats render after the uploader; lift them above the file strip. */
+[data-testid="stVerticalBlock"] > div:has(.app-bar) { order: -2; }
+[data-testid="stVerticalBlock"] > div:has(.top-stats) { order: -1; }
+[data-testid="stFileUploader"] { padding: 4px 12px !important; }
+[data-testid="stFileUploader"] [data-testid="stWidgetLabel"] { display: none; }
+</style>
+"""
+
+
+def section_head(title: str, subtitle: str = "") -> None:
+    sub = f"<p>{subtitle}</p>" if subtitle else ""
+    st.markdown(f'<div class="sec-head"><h4>{title}</h4>{sub}</div>', unsafe_allow_html=True)
+
+
+def render_stats(items: List[Tuple[str, int]], extra_class: str = "") -> None:
+    cards = "".join(
+        f'<div class="stat"><div class="stat-label">{label}</div>'
+        f'<div class="stat-num" style="--to:{int(value)}"></div></div>'
+        for label, value in items
+    )
+    st.markdown(f'<div class="stats {extra_class}">{cards}</div>', unsafe_allow_html=True)
+
+
+def is_source_kept(source: Dict[str, object]) -> bool:
+    sid = str(source["source_id"])
+    return bool(
+        st.session_state.get(
+            f"keep_{sid}",
+            st.session_state["source_keep"].get(sid, source["default_keep"]),
+        )
+    )
+
+
+def set_all_keep(sources: List[Dict[str, object]], use_suggestion: bool) -> None:
+    for s in sources:
+        sid = str(s["source_id"])
+        value = bool(s["default_keep"]) if use_suggestion else True
+        st.session_state["source_keep"][sid] = value
+        st.session_state[f"keep_{sid}"] = value
 
 
 restore_persisted_state()
@@ -2145,19 +2272,13 @@ show_landing = not st.session_state.get("loaded_files") and not st.session_state
 if show_landing:
     render_landing_scene()
 uploaded_files = st.file_uploader(
-    "Upload CSV/XLSX/XLS (multiple files allowed)",
+    "Drop your CSV / XLSX files here",
     type=["csv", "xlsx", "xls"],
     accept_multiple_files=True,
     key=upload_key,
 )
 if show_landing and not uploaded_files:
-    st.markdown(
-        '<div class="landing-tip">'
-        "Upload one or more files to start. Multi-sheet Excel files show Keep/Ignore per sheet. "
-        "Loaded progress stays until you click 'Remove Loaded Files'."
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    render_landing_chips()
 
 if uploaded_files:
     batch_files = []
@@ -2227,137 +2348,139 @@ if load_errors:
         st.error(f"Could not read file: {msg}")
 
 if all_sources:
-    # Initialize keep flags (default from heuristic; preserve existing choices).
     for source in all_sources:
         sid = str(source["source_id"])
         if sid not in st.session_state["source_keep"]:
             st.session_state["source_keep"][sid] = bool(source["default_keep"])
+        if f"keep_{sid}" not in st.session_state:
+            st.session_state[f"keep_{sid}"] = st.session_state["source_keep"][sid]
 
-    top_left, top_right = st.columns([3, 1])
-    with top_left:
-        kept_sources_preview = [
-            s for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)
-        ]
-        kept_count = len(kept_sources_preview)
-        total_runners = sum(int(s.get("runner_count", s["rows"])) for s in kept_sources_preview)
-        st.success(
-            f"Loaded {len(st.session_state['loaded_files'])} file(s) → "
-            f"{len(all_sources)} sheet(s) | Keeping {kept_count} | "
-            f"Selected runners ≈ {total_runners}"
-        )
-    with top_right:
-        if st.button("Remove Loaded Files", type="secondary", use_container_width=True):
-            clear_loaded_file_state()
-            st.rerun()
+    file_names = [str(meta["file_name"]) for meta in st.session_state["loaded_files"].values()]
+    kept_sources = [s for s in all_sources if is_source_kept(s)]
+    total_runners = sum(int(s.get("runner_count", s["rows"])) for s in kept_sources)
 
-    st.subheader("1) Analyse & Keep Files / Sheets")
-    st.caption("Keep runner sheets. Ignore summary sheets like Count.")
-
-    overview = pd.DataFrame(
+    st.markdown(WORKSPACE_CSS, unsafe_allow_html=True)
+    st.markdown(
+        '<div class="ki-flash"></div>'
+        '<div class="app-bar"><div>'
+        '<div class="app-kicker"><i></i>Sports Timing Solutions</div>'
+        '<div class="app-title">FileSort <span>Cleaner</span></div>'
+        "</div>"
+        f'<div class="app-files"><b>{len(file_names)}</b> file(s) loaded<br>'
+        f'{", ".join(file_names[:3])}{" …" if len(file_names) > 3 else ""}</div>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    render_stats(
         [
-            {
-                "File": str(s["file_name"]),
-                "Sheet": str(s.get("sheet_name") or "(whole file)"),
-                "Runners": int(s.get("runner_count", s["rows"])),
-                "Rows": int(s["rows"]),
-                "Cols": len(s["columns"]),  # type: ignore[arg-type]
-                "Suggestion": "IGNORE" if not s["default_keep"] else "KEEP",
-            }
-            for s in all_sources
-        ]
-    ).sort_values(["Runners", "Rows"], ascending=[False, False])
-    st.dataframe(overview, hide_index=True, use_container_width=True)
+            ("Files", len(file_names)),
+            ("Sheets", len(all_sources)),
+            ("Keeping", len(kept_sources)),
+            ("Runners", total_runners),
+        ],
+        extra_class="top-stats",
+    )
 
-    q1, q2 = st.columns(2)
-    with q1:
-        if st.button("Use Suggestions", use_container_width=True):
-            for s in all_sources:
-                st.session_state["source_keep"][str(s["source_id"])] = bool(s["default_keep"])
-            st.rerun()
-    with q2:
-        if st.button("Keep All", use_container_width=True):
-            for s in all_sources:
-                st.session_state["source_keep"][str(s["source_id"])] = True
-            st.rerun()
+    tab_keep, tab_map, tab_values, tab_clean = st.tabs(
+        ["Keep sheets", "Map columns", "Map values", "Clean & download"],
+        key="workspace_step",
+    )
 
-    for source in all_sources:
-        sid = str(source["source_id"])
-        label = source_label(source)
-        runners = int(source.get("runner_count", source["rows"]))
-        tip = "summary" if not source["default_keep"] else "runners"
-        keep = st.checkbox(
-            f"{label} — {runners} runners ({tip})",
-            value=bool(st.session_state["source_keep"].get(sid, source["default_keep"])),
-            key=f"keep_{sid}",
+    with tab_keep:
+        section_head(
+            "Choose what to clean",
+            "Runner sheets are kept automatically. Summary sheets like Count are switched off.",
         )
-        st.session_state["source_keep"][sid] = keep
+        q1, q2, q3 = st.columns(3)
+        with q1:
+            if st.button("Use suggestions", use_container_width=True):
+                set_all_keep(all_sources, use_suggestion=True)
+                st.rerun()
+        with q2:
+            if st.button("Keep all", use_container_width=True):
+                set_all_keep(all_sources, use_suggestion=False)
+                st.rerun()
+        with q3:
+            if st.button("Remove files & start over", use_container_width=True):
+                clear_loaded_file_state()
+                st.rerun()
 
-    kept_sources = [
-        s for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)
-    ]
-    if not kept_sources:
-        st.warning("Keep at least one source before mapping.")
-        save_persisted_state()
-        st.stop()
-
-    st.subheader("2) Map Columns (one source at a time)")
-    source_labels = {source_label(s): s for s in kept_sources}
-    selected_label = st.selectbox("Working on", list(source_labels.keys()), key="active_map_source_label")
-    active_source = source_labels[selected_label]
-    active_sid = str(active_source["source_id"])
-    active_df = active_source["df"]  # type: ignore[assignment]
-    active_cols = list(active_source["columns"])  # type: ignore[arg-type]
-    active_guess = guess_mapping(active_cols)
-    active_options = ["<None>"] + active_cols
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Runners", int(active_source.get("runner_count", active_source["rows"])))
-    m2.metric("Rows", int(active_source["rows"]))
-    m3.metric("Columns", len(active_cols))
-
-    with st.expander("Preview (first 8 rows)", expanded=False):
-        st.dataframe(active_df.head(8), use_container_width=True)
-
-    # Resolve mappings for all kept sources (defaults + saved picks).
-    source_mappings: Dict[str, Dict[str, Optional[str]]] = {}
-    for source in kept_sources:
-        sid = str(source["source_id"])
-        cols = list(source["columns"])  # type: ignore[arg-type]
-        guessed = guess_mapping(cols)
-        options = set(cols) | {"<None>"}
-        mapping: Dict[str, Optional[str]] = {}
-        for field in CANONICAL_FIELDS:
-            key = map_key(sid, field)
-            picked = st.session_state.get(key)
-            if picked not in options:
-                picked = guessed.get(field) if guessed.get(field) in options else "<None>"
-            mapping[field] = None if picked == "<None>" else picked
-        source_mappings[sid] = mapping
-
-    st.markdown("**Essential columns**")
-    essential_ui = st.columns(2)
-    for idx, field in enumerate(ESSENTIAL_MAPPING_FIELDS):
-        key = map_key(active_sid, field)
-        current = source_mappings[active_sid].get(field) or active_guess.get(field) or "<None>"
-        if current not in active_options:
-            current = "<None>"
-        picked = essential_ui[idx % 2].selectbox(
-            FIELD_LABELS[field],
-            options=active_options,
-            index=active_options.index(current),
-            key=key,
+        ordered = sorted(
+            all_sources,
+            key=lambda s: (-int(s.get("runner_count", s["rows"])), -int(s["rows"])),
         )
-        source_mappings[active_sid][field] = None if picked == "<None>" else picked
+        for source in ordered:
+            sid = str(source["source_id"])
+            runners = int(source.get("runner_count", source["rows"]))
+            sheet = str(source.get("sheet_name") or "Whole file")
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([6, 2, 2], vertical_alignment="center")
+                with c1:
+                    keep = st.toggle(sheet, key=f"keep_{sid}")
+                    st.markdown(
+                        f'<div class="src-file">{source["file_name"]} &middot; '
+                        f'{int(source["rows"])} rows &middot; {len(source["columns"])} columns</div>',  # type: ignore[arg-type]
+                        unsafe_allow_html=True,
+                    )
+                with c2:
+                    badge = (
+                        '<span class="badge ok">Runner sheet</span>'
+                        if source["default_keep"]
+                        else '<span class="badge mute">Looks like summary</span>'
+                    )
+                    st.markdown(badge, unsafe_allow_html=True)
+                with c3:
+                    st.markdown(
+                        f'<div class="src-num">{runners}<small>runners</small></div>',
+                        unsafe_allow_html=True,
+                    )
+            st.session_state["source_keep"][sid] = keep
 
-    with st.expander("More columns (optional)", expanded=False):
-        advanced_fields = [f for f in CANONICAL_FIELDS if f not in ESSENTIAL_MAPPING_FIELDS]
-        adv_ui = st.columns(2)
-        for idx, field in enumerate(advanced_fields):
+        kept_sources = [s for s in all_sources if st.session_state["source_keep"].get(str(s["source_id"]), False)]
+        if not kept_sources:
+            st.warning("Keep at least one sheet to continue.")
+            save_persisted_state()
+            st.stop()
+
+    with tab_map:
+        section_head(
+            "Map columns",
+            "Pick which column holds each field. Work through one sheet at a time.",
+        )
+        source_labels = {source_label(s): s for s in kept_sources}
+        selected_label = st.selectbox("Working on", list(source_labels.keys()), key="active_map_source_label")
+        active_source = source_labels[selected_label]
+        active_sid = str(active_source["source_id"])
+        active_df = active_source["df"]  # type: ignore[assignment]
+        active_cols = list(active_source["columns"])  # type: ignore[arg-type]
+        active_guess = guess_mapping(active_cols)
+        active_options = ["<None>"] + active_cols
+
+        # Resolve mappings for all kept sources (defaults + saved picks).
+        source_mappings: Dict[str, Dict[str, Optional[str]]] = {}
+        for source in kept_sources:
+            sid = str(source["source_id"])
+            cols = list(source["columns"])  # type: ignore[arg-type]
+            guessed = guess_mapping(cols)
+            options = set(cols) | {"<None>"}
+            mapping: Dict[str, Optional[str]] = {}
+            for field in CANONICAL_FIELDS:
+                key = map_key(sid, field)
+                picked = st.session_state.get(key)
+                if picked not in options:
+                    picked = guessed.get(field) if guessed.get(field) in options else "<None>"
+                mapping[field] = None if picked == "<None>" else picked
+            source_mappings[sid] = mapping
+
+        health_slot = st.empty()
+
+        essential_ui = st.columns(2)
+        for idx, field in enumerate(ESSENTIAL_MAPPING_FIELDS):
             key = map_key(active_sid, field)
             current = source_mappings[active_sid].get(field) or active_guess.get(field) or "<None>"
             if current not in active_options:
                 current = "<None>"
-            picked = adv_ui[idx % 2].selectbox(
+            picked = essential_ui[idx % 2].selectbox(
                 FIELD_LABELS[field],
                 options=active_options,
                 index=active_options.index(current),
@@ -2365,84 +2488,143 @@ if all_sources:
             )
             source_mappings[active_sid][field] = None if picked == "<None>" else picked
 
-    for field in CANONICAL_FIELDS:
-        picked = st.session_state.get(map_key(active_sid, field), "<None>")
-        source_mappings[active_sid][field] = None if picked == "<None>" else picked
+        with st.expander("More columns (optional)", expanded=False):
+            advanced_fields = [f for f in CANONICAL_FIELDS if f not in ESSENTIAL_MAPPING_FIELDS]
+            adv_ui = st.columns(2)
+            for idx, field in enumerate(advanced_fields):
+                key = map_key(active_sid, field)
+                current = source_mappings[active_sid].get(field) or active_guess.get(field) or "<None>"
+                if current not in active_options:
+                    current = "<None>"
+                picked = adv_ui[idx % 2].selectbox(
+                    FIELD_LABELS[field],
+                    options=active_options,
+                    index=active_options.index(current),
+                    key=key,
+                )
+                source_mappings[active_sid][field] = None if picked == "<None>" else picked
 
-    status_rows = [
-        {
-            "Source": source_label(s),
-            "Category": source_mappings[str(s["source_id"])].get("category") or "—",
-            "T-Shirt": source_mappings[str(s["source_id"])].get("tshirt_size") or "—",
-            "Phone": source_mappings[str(s["source_id"])].get("phone") or "—",
-            "DOB": source_mappings[str(s["source_id"])].get("dob") or "—",
-        }
-        for s in kept_sources
-    ]
-    st.caption("Column map status")
-    st.dataframe(pd.DataFrame(status_rows), hide_index=True, use_container_width=True)
+        for field in CANONICAL_FIELDS:
+            picked = st.session_state.get(map_key(active_sid, field), "<None>")
+            source_mappings[active_sid][field] = None if picked == "<None>" else picked
 
-    age_as_on = st.date_input(
-        "Age calculation date (as on)",
-        value=date.today(),
-        format="DD-MM-YYYY",
-        key="age_as_on_date",
-    )
-
-    st.subheader("3) Map Category & T-Shirt Values")
-    st.caption("Values from every kept source. Edit Mapped Value only.")
-
-    category_map: Dict[str, str] = {}
-    tshirt_map: Dict[str, str] = {}
-
-    try:
-        cat_breakdown = build_value_breakdown(kept_sources, source_mappings, "category")
-        if cat_breakdown.empty:
-            st.info("Map a Category column in step 2 to edit category values.")
-        else:
-            category_map = render_value_map_editor(
-                "Category values by source",
-                cat_breakdown,
-                "category_value_map",
-                "category_value_editor",
+        has_name = any(
+            source_mappings[active_sid].get(f) for f in ("full_name", "first_name", "last_name")
+        )
+        checks = [has_name] + [
+            bool(source_mappings[active_sid].get(f))
+            for f in ESSENTIAL_MAPPING_FIELDS
+            if f not in ("full_name", "first_name", "last_name")
+        ]
+        matched, total = sum(checks), len(checks)
+        health_slot.markdown(
+            f'<div class="health"><span class="health-text">{matched} of {total} key fields matched</span>'
+            f'<div class="health-bar"><i style="width:{int(100 * matched / max(total, 1))}%"></i></div>'
+            + (
+                '<span class="badge ok">Ready</span>'
+                if matched == total
+                else '<span class="badge warn">Check missing fields</span>'
             )
-            if st.button("Reset Category Mappings", key="reset_category_maps"):
-                st.session_state["category_value_map"] = {}
-                for key in list(st.session_state.keys()):
-                    if isinstance(key, str) and key.startswith("category_value_editor::"):
-                        st.session_state.pop(key, None)
-                st.rerun()
-    except Exception as exc:
-        st.error(f"Category mapping failed: {exc}")
+            + "</div>",
+            unsafe_allow_html=True,
+        )
 
-    try:
-        tshirt_breakdown = build_value_breakdown(kept_sources, source_mappings, "tshirt_size")
-        if tshirt_breakdown.empty:
-            st.info("Map a T-Shirt column in step 2 to edit T-shirt values.")
-        else:
-            tshirt_map = render_value_map_editor(
-                "T-Shirt values by source",
-                tshirt_breakdown,
-                "tshirt_value_map",
-                "tshirt_value_editor",
+        with st.expander("Preview this sheet (first 8 rows)", expanded=False):
+            st.dataframe(active_df.head(8), use_container_width=True)
+
+        matrix_fields = [
+            ("Name", ("full_name", "first_name", "last_name")),
+            ("Gender", ("gender",)),
+            ("Phone", ("phone",)),
+            ("DOB", ("dob",)),
+            ("Category", ("category",)),
+            ("T-Shirt", ("tshirt_size",)),
+        ]
+        header = "".join(f"<th>{label}</th>" for label, _ in matrix_fields)
+        body = ""
+        for s in kept_sources:
+            mapping = source_mappings[str(s["source_id"])]
+            cells = "".join(
+                '<td class="ok">&#10003;</td>'
+                if any(mapping.get(f) for f in fields)
+                else '<td class="miss">&#9888;</td>'
+                for _, fields in matrix_fields
             )
-            if st.button("Reset T-Shirt Mappings", key="reset_tshirt_maps"):
-                st.session_state["tshirt_value_map"] = {}
-                for key in list(st.session_state.keys()):
-                    if isinstance(key, str) and key.startswith("tshirt_value_editor::"):
-                        st.session_state.pop(key, None)
-                st.rerun()
-    except Exception as exc:
-        st.error(f"T-Shirt mapping failed: {exc}")
+            body += f"<tr><td>{source_label(s)}</td>{cells}</tr>"
+        st.markdown(
+            '<div class="sec-head"><h4>All sheets</h4><p>&#10003; matched &nbsp;&middot;&nbsp; &#9888; not mapped</p></div>'
+            f'<table class="map-matrix"><tr><th>Sheet</th>{header}</tr>{body}</table>',
+            unsafe_allow_html=True,
+        )
 
-    st.subheader("4) Clean & Download")
-    render_error_legend()
+        age_as_on = st.date_input(
+            "Calculate age as on",
+            value=date.today(),
+            format="DD-MM-YYYY",
+            key="age_as_on_date",
+        )
 
-    if st.button("Run Cleaning", type="primary"):
-        parts: List[Tuple[pd.DataFrame, Dict[Tuple[int, str], str], str, str]] = []
-        with st.spinner(f"Cleaning {len(kept_sources)} source(s)..."):
-            for source in kept_sources:
+    with tab_values:
+        section_head(
+            "Map category & T-shirt values",
+            "Rename values so every sheet uses the same names (e.g. HM → Half Marathon).",
+        )
+        category_map: Dict[str, str] = {}
+        tshirt_map: Dict[str, str] = {}
+
+        try:
+            cat_breakdown = build_value_breakdown(kept_sources, source_mappings, "category")
+            if cat_breakdown.empty:
+                st.info("Map a Category column in step 2 to edit category values.")
+            else:
+                category_map = render_value_map_editor(
+                    "Categories",
+                    cat_breakdown,
+                    "category_value_map",
+                    "category_value_editor",
+                )
+                if st.button("Reset categories", key="reset_category_maps"):
+                    st.session_state["category_value_map"] = {}
+                    for key in list(st.session_state.keys()):
+                        if isinstance(key, str) and key.startswith("category_value_editor::"):
+                            st.session_state.pop(key, None)
+                    st.rerun()
+        except Exception as exc:
+            st.error(f"Category mapping failed: {exc}")
+
+        try:
+            tshirt_breakdown = build_value_breakdown(kept_sources, source_mappings, "tshirt_size")
+            if tshirt_breakdown.empty:
+                st.info("Map a T-Shirt column in step 2 to edit T-shirt values.")
+            else:
+                tshirt_map = render_value_map_editor(
+                    "T-shirt sizes",
+                    tshirt_breakdown,
+                    "tshirt_value_map",
+                    "tshirt_value_editor",
+                )
+                if st.button("Reset T-shirt sizes", key="reset_tshirt_maps"):
+                    st.session_state["tshirt_value_map"] = {}
+                    for key in list(st.session_state.keys()):
+                        if isinstance(key, str) and key.startswith("tshirt_value_editor::"):
+                            st.session_state.pop(key, None)
+                    st.rerun()
+        except Exception as exc:
+            st.error(f"T-Shirt mapping failed: {exc}")
+
+    with tab_clean:
+        section_head(
+            "Clean & download",
+            f"{len(kept_sources)} sheet(s) · {total_runners} runners will be cleaned and merged into one Excel file.",
+        )
+        render_error_legend()
+
+        if st.button("Run cleaning", type="primary", use_container_width=True):
+            parts: List[Tuple[pd.DataFrame, Dict[Tuple[int, str], str], str, str]] = []
+            progress = st.progress(0.0, text="Starting…")
+            for idx, source in enumerate(kept_sources):
                 sid = str(source["source_id"])
+                progress.progress(idx / len(kept_sources), text=f"Cleaning {source_label(source)}…")
                 cleaned_df, cell_flags = apply_cleaning(
                     source["df"],  # type: ignore[arg-type]
                     source_mappings[sid],
@@ -2458,37 +2640,35 @@ if all_sources:
                         str(source.get("sheet_name") or ""),
                     )
                 )
+            progress.progress(0.95, text="Merging sheets…")
             cleaned_df, cell_flags = merge_cleaned_frames(parts)
+            excel_bytes = df_to_excel_with_highlight(cleaned_df, cell_flags)
+            progress.empty()
 
-        error_counts = count_errors_by_type(cell_flags)
-        if error_counts:
-            summary_parts = [
-                f"{ERROR_LEGEND[error_type]['label']}: {count}"
-                for error_type, count in sorted(error_counts.items())
-                if error_type in ERROR_LEGEND
-            ]
-            st.success(
-                f"Cleaning completed for {len(kept_sources)} source(s), "
-                f"{len(cleaned_df)} total rows. Flagged cells -> {' | '.join(summary_parts)}"
+            error_counts = count_errors_by_type(cell_flags)
+            render_stats(
+                [
+                    ("Rows cleaned", len(cleaned_df)),
+                    ("Sheets merged", len(kept_sources)),
+                    ("Columns", len(cleaned_df.columns)),
+                    ("Flagged cells", sum(error_counts.values())),
+                ]
             )
-        else:
-            st.success(
-                f"Cleaning completed for {len(kept_sources)} source(s), "
-                f"{len(cleaned_df)} total rows. No flagged errors found."
+            st.download_button(
+                label="Download cleaned Excel",
+                data=excel_bytes,
+                file_name="cleaned_output.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True,
+                on_click="ignore",
             )
-
-        render_error_legend()
-        preview_df = cleaned_df.head(20)
-        if cell_flags:
-            st.dataframe(style_preview_dataframe(preview_df, cell_flags), use_container_width=True)
-        else:
-            st.dataframe(preview_df, use_container_width=True)
-
-        excel_bytes = df_to_excel_with_highlight(cleaned_df, cell_flags)
-        st.download_button(
-            label="Download Cleaned Excel",
-            data=excel_bytes,
-            file_name="cleaned_output.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+            section_head("Issues found", "Flagged cells are coloured the same way in the Excel file.")
+            render_error_legend(error_counts)
+            section_head("Preview", "First 20 rows of the merged output.")
+            preview_df = cleaned_df.head(20)
+            if cell_flags:
+                st.dataframe(style_preview_dataframe(preview_df, cell_flags), use_container_width=True)
+            else:
+                st.dataframe(preview_df, use_container_width=True)
     save_persisted_state()
